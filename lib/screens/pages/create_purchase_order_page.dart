@@ -1,10 +1,17 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:purchaser_edge/screens/pages/text_filed_widget.dart';
+import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/screens/pages/pdf_viewer_page.dart';
+import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
 import 'package:unicons/unicons.dart';
+import 'package:path/path.dart' as p;
 
 class CreatePurchaseOrderPage extends StatefulWidget {
   const CreatePurchaseOrderPage({super.key});
@@ -15,8 +22,24 @@ class CreatePurchaseOrderPage extends StatefulWidget {
 }
 
 class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
+  void pickFiles() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      allowMultiple: true,
+    );
+
+    if (result != null) {
+      List<File> files = result.paths.map((path) => File(path!)).toList();
+      context.read<FileProvider>().addFile(files);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // ✅ watch ที่เดียว ครอบทุกอย่าง
+    final files = context.watch<FileProvider>().files;
+
     return Container(
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
       child: ListView(
@@ -79,12 +102,15 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                       color: ColorService().mainTextColor,
                                     ),
                                   ),
-                                  Text(
-                                    'ກົດເພື່ອເລືອກຟາຍ',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      color: ColorService().primaryColor,
+                                  GestureDetector(
+                                    onTap: pickFiles,
+                                    child: Text(
+                                      'ກົດເພື່ອເລືອກຟາຍ',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                        color: ColorService().primaryColor,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -95,14 +121,60 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
 
                         Expanded(
                           child: Container(
+                            padding: EdgeInsets.all(10),
                             width: double.infinity,
                             decoration: BoxDecoration(
                               color: ColorService().mainBackGroundColor,
                               borderRadius: BorderRadius.circular(10),
                             ),
+                            child: files.isEmpty
+                                ? Column(
+                                    spacing: 10,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        UniconsLine.file,
+                                        size: 50,
+                                        color: ColorService().mainTextColor,
+                                      ),
+                                      Text(
+                                        'ຍັງບໍ່ມີຟາຍ',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : ListView.builder(
+                                    itemCount: files.length,
+                                    itemBuilder: (context, index) {
+                                      final file = files[index];
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 40,
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(p.basename(file.path)),
+                                            GestureDetector(
+                                              onTap: () => context
+                                                  .read<FileProvider>()
+                                                  .deleteFile(index),
+                                              child: Icon(
+                                                UniconsLine.trash,
+                                                color: Colors.red.shade400,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                           ),
                         ),
-                        _buildBottomButton(),
+                        _buildBottomButton(files),
                       ],
                     ),
                   ),
@@ -175,59 +247,109 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
     );
   }
 
-  Widget _buildBottomButton() {
+  Widget _buildBottomButton(List<File> files) {
     return Container(
       width: double.infinity,
       height: 50,
-
       child: Row(
-        spacing: 20,
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            height: 50,
-            decoration: BoxDecoration(
-              border: Border.all(
-                width: 2,
-                color: ColorService().mainTextFiledColor,
-              ),
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Row(
-              spacing: 10,
-              children: [
-                Icon(UniconsLine.times, color: ColorService().mainTextColor),
-                Text(
-                  'ຍົກເລີກ',
-                  style: TextStyle(
-                    color: ColorService().mainTextColor,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
           GestureDetector(
+            onTap: () {
+              if (files.isEmpty) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => PDFViewerHome()),
+              );
+            },
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 20),
               height: 50,
               decoration: BoxDecoration(
-                color: ColorService().primaryColor,
+                border: Border.all(
+                  width: 2,
+                  color: ColorService().mainTextFiledColor,
+                ),
+                color: files.isEmpty
+                    ? Colors.transparent
+                    : ColorService().primaryColor,
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Row(
                 spacing: 10,
                 children: [
-                  Text(
-                    'ບັນທຶກເອກະສານ',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  Icon(
+                    files.isEmpty ? UniconsLine.eye_slash : UniconsLine.eye,
+                    color: files.isEmpty
+                        ? ColorService().mainTextColor
+                        : Colors.white,
                   ),
-                  Icon(UniconsLine.save, color: Colors.white),
+                  Text(
+                    'ເປີດເອກະສານ',
+                    style: TextStyle(
+                      color: files.isEmpty
+                          ? ColorService().mainTextColor
+                          : Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
                 ],
               ),
             ),
+          ),
+          Row(
+            spacing: 20,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                height: 50,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    width: 2,
+                    color: ColorService().mainTextFiledColor,
+                  ),
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Row(
+                  spacing: 10,
+                  children: [
+                    Icon(
+                      UniconsLine.times,
+                      color: ColorService().mainTextColor,
+                    ),
+                    Text(
+                      'ຍົກເລີກ',
+                      style: TextStyle(
+                        color: ColorService().mainTextColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: ColorService().primaryColor,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Row(
+                    spacing: 10,
+                    children: [
+                      Text(
+                        'ບັນທຶກເອກະສານ',
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      Icon(UniconsLine.save, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

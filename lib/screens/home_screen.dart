@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:purchaser_edge/main.dart';
 import 'package:purchaser_edge/screens/pages/all_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
@@ -95,20 +96,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          Container(
-            height: 50,
-            child: Row(
-              spacing: isShowLabel ? 10 : 0,
-              children: [
-                Icon(UniconsLine.sign_in_alt, color: Colors.red),
-
-                isShowLabel
-                    ? Text(
-                        'ອອກຈາກລະບົບ',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      )
-                    : SizedBox(),
-              ],
+          GestureDetector(
+            onTap: ()  {
+              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => MyApp()), (predicate) => false);
+            },
+            child: Container(
+              height: 50,
+              child: Row(
+                spacing: isShowLabel ? 10 : 0,
+                children: [
+                  Icon(UniconsLine.sign_in_alt, color: Colors.white),
+            
+                  isShowLabel
+                      ? Text(
+                          'ອອກຈາກລະບົບ',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        )
+                      : SizedBox(),
+                ],
+              ),
             ),
           ),
         ],
@@ -116,3 +122,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+
+

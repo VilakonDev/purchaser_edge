@@ -137,7 +137,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     ),
                                   ),
                                 ],
-                                rows: List.generate(10, (index) {
+                                rows: List.generate(100, (index) {
                                   return DataRow(
                                     cells: [
                                       DataCell(Text('PO-2026-00$index')),

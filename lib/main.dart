@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:purchaser_edge/screens/home_screen.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/login_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  pdfrxFlutterInitialize();
   runApp(MyApp());
 }
 
@@ -12,11 +16,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Purchaser Edge',
-      debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
-      theme: ThemeData(textTheme: GoogleFonts.notoSansLaoTextTheme()),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => FileProvider())
+      ],
+      child: MaterialApp(
+        title: 'Purchaser Edge',
+        debugShowCheckedModeBanner: false,
+        home: LoginScreen(),
+        theme: ThemeData(textTheme: GoogleFonts.notoSansLaoTextTheme()),
+      ),
     );
   }
 }
