@@ -1,0 +1,275 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:purchaser_edge/services/color_service.dart';
+import 'package:purchaser_edge/widgets/app_bar_widget.dart';
+import 'package:purchaser_edge/widgets/drop_down_widget.dart';
+import 'package:unicons/unicons.dart';
+
+class AllDocumentPage extends StatefulWidget {
+  const AllDocumentPage({super.key});
+
+  @override
+  State<AllDocumentPage> createState() => _AllDocumentPageState();
+}
+
+class _AllDocumentPageState extends State<AllDocumentPage> {
+  final ScrollController _verticalController = ScrollController();
+  final ScrollController _horizontalController = ScrollController();
+
+  @override
+  void dispose() {
+    _verticalController.dispose();
+    _horizontalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
+      child: Column(
+        children: [
+          AppBarWidget(label: 'ເອກະສານທັງໝົດ', widget: Container()),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsetsGeometry.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 20,
+                children: [
+                  _buildSearchBox(),
+                  Expanded(
+                    child: RawScrollbar(
+                      controller: _verticalController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      scrollbarOrientation: ScrollbarOrientation.right,
+                      thickness: 8,
+                      radius: Radius.circular(4),
+                      child: SingleChildScrollView(
+                        controller: _verticalController,
+                        scrollDirection: Axis.vertical,
+                        child: RawScrollbar(
+                          controller: _horizontalController,
+                          thumbVisibility: true,
+                          trackVisibility: true,
+                          scrollbarOrientation: ScrollbarOrientation.bottom,
+                          thickness: 8,
+                          radius: Radius.circular(4),
+                          child: SingleChildScrollView(
+                            controller: _horizontalController,
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minWidth:
+                                    MediaQuery.of(context).size.width - 40,
+                              ),
+                              child: DataTable(
+                                columnSpacing: 24,
+                                headingRowColor: MaterialStatePropertyAll(
+                                  Colors.blue.shade300,
+                                ),
+                                dataRowColor: MaterialStatePropertyAll(
+                                  Colors.white,
+                                ),
+                                columns: [
+                                  DataColumn(
+                                    label: Text(
+                                      'ເລກທີ່ເອກະສານ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ປະເພດເອກະສານ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ຊື່ເລື່ອງ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ຜູ້ສົ່ງເອກະສານ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ວັນທີສົ່ງເອກະສານ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ສະຖານະ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ຈັດການ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                rows: List.generate(10, (index) {
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text('PO-2026-00$index')),
+                                      DataCell(Text('ໃບສັ່ງຊື້ສິນຄ້າ')),
+                                      DataCell(
+                                        Text(
+                                          'ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ',
+                                        ),
+                                      ),
+                                      DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
+                                      DataCell(
+                                        Text(
+                                          DateFormat(
+                                            'EEE, M/d/y',
+                                          ).format(DateTime.now()),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Container(
+                                          width: 120,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: Colors.green,
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              'ອະນຸມັດແລ້ວ',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Row(
+                                          spacing: 8,
+                                          children: [
+                                            _buildActionButton(
+                                              icon: UniconsLine.eye,
+                                              color: Colors.blue,
+                                            ),
+                                            _buildActionButton(
+                                              icon: UniconsLine.edit,
+                                              color: Colors.orange,
+                                            ),
+                                            _buildActionButton(
+                                              icon: UniconsLine.trash,
+                                              color: Colors.red,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({required IconData icon, required Color color}) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: Colors.white, size: 18),
+    );
+  }
+
+  Widget _buildSearchBox() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        spacing: 20,
+        children: [
+          Expanded(
+            child: DropDownWidget(
+              label: 'ປະເພດເອກະສານ',
+              items: ['ໃບຂໍຊື້', 'ໃບະສະເໜີລາຄາ', 'ໃບສັ່ງຊື້'],
+            ),
+          ),
+          Expanded(
+            child: DropDownWidget(
+              label: 'ກຸ່ມສິນຄ້າ',
+              items: ['ໃບຂໍຊື້', 'ໃບະສະເໜີລາຄາ', 'ໃບສັ່ງຊື້'],
+            ),
+          ),
+          Container(width: 300, height: 40),
+          Column(
+            children: [
+              SizedBox(height: 25),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: ColorService().primaryColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  spacing: 10,
+                  children: [
+                    Text('ຄົ້ນຫາ', style: TextStyle(color: Colors.white)),
+                    Icon(UniconsLine.search, color: Colors.white),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
