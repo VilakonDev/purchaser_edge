@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:purchaser_edge/screens/home_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:unicons/unicons.dart';
@@ -73,23 +74,28 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: TextEditingController(),
                       ),
                       SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: ColorService().mainGredientColor,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          spacing: 10,
-                          children: [
-                            Text(
-                              'ເຂົ້າສູ່ລະບົບ',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            Icon(UniconsLine.sign_out_alt, color: Colors.white),
-                          ],
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: ColorService().mainGredientColor,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            spacing: 10,
+                            children: [
+                              Text(
+                                'ເຂົ້າສູ່ລະບົບ',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              Icon(UniconsLine.sign_out_alt, color: Colors.white),
+                            ],
+                          ),
                         ),
                       ),
                     ],
