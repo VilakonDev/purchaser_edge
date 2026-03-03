@@ -22,8 +22,6 @@ class CreatePurchaseOrderPage extends StatefulWidget {
 }
 
 class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
-  bool _isDragOverDropZone = false;
-
   void pickFiles() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -37,21 +35,14 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
     }
   }
 
-  void _handleDropFiles(PointerEvent event) {
-    // Handle file drop
-    if (event is PointerDownEvent) {
-      _isDragOverDropZone = true;
-      setState(() {});
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    // ✅ watch ที่เดียว ครอบทุกอย่าง
     final files = context.watch<FileProvider>().files;
 
     return Container(
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
-      child: ListView(
+      child: Column(
         children: [
           AppBarWidget(label: 'ສ້າງເອກະສານສັ່ງຊື້', widget: Container()),
           Expanded(
@@ -61,174 +52,70 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 spacing: 20,
                 children: [
                   _buildDocumentInfo(),
-                  Container(
-                    height: 700,
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      spacing: 20,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ແນບຟາຍເອກະສານ',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: ColorService().mainTextColor,
-                          ),
-                        ),
-                        DragTarget<List<File>>(
-                          onAcceptWithDetails: (details) {
-                            setState(() {
-                              _isDragOverDropZone = false;
-                            });
-                          },
-                          onLeave: (data) {
-                            setState(() {
-                              _isDragOverDropZone = false;
-                            });
-                          },
-                          onMove: (details) {
-                            setState(() {
-                              _isDragOverDropZone = true;
-                            });
-                          },
-                          builder: (context, candidateData, rejectedData) {
-                            return Container(
-                              width: double.infinity,
-                              height: 300,
-                              decoration: BoxDecoration(
-                                color: _isDragOverDropZone
-                                    ? ColorService()
-                                        .primaryColor
-                                        .withOpacity(0.1)
-                                    : ColorService().mainTextFiledColor,
-                                border: Border.all(
-                                  color: _isDragOverDropZone
-                                      ? ColorService().primaryColor
-                                      : ColorService().borderTextFiledColor,
-                                  width: 3,
-                                  style: _isDragOverDropZone
-                                      ? BorderStyle.solid
-                                      : BorderStyle.solid,
+
+                  Expanded(
+                    child: Container(
+                      
+                      padding: EdgeInsets.all(10),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: files.isEmpty
+                          ? Column(
+                              spacing: 10,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  UniconsLine.file,
+                                  size: 50,
+                                  color: ColorService().mainTextColor,
                                 ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: GestureDetector(
-                                onTap: pickFiles,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      UniconsLine.cloud_upload,
-                                      size: 120,
-                                      color: _isDragOverDropZone
-                                          ? ColorService().primaryColor
-                                          : ColorService().mainTextColor,
-                                    ),
-                                    SizedBox(height: 20),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      spacing: 20,
-                                      children: [
-                                        Text(
-                                          'ລາກ ແລະ ວາງຟາຍ ຫຼື',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: _isDragOverDropZone
-                                                ? ColorService().primaryColor
-                                                : ColorService()
-                                                    .mainTextColor,
-                                          ),
-                                        ),
-                                        Text(
-                                          'ກົດເພື່ອເລືອກຟາຍ',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                            color: ColorService()
-                                                .primaryColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                Text(
+                                  'ຍັງບໍ່ມີຟາຍ',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                        Expanded(
-                          child: Container(
-                            padding: EdgeInsets.all(10),
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: ColorService().mainBackGroundColor,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: files.isEmpty
-                                ? Column(
-                                    spacing: 10,
+                              ],
+                            )
+                          : ListView.builder(
+                              itemCount: files.length,
+                              itemBuilder: (context, index) {
+                                final file = files[index];
+                                return Container(
+                                  width: double.infinity,
+                                  height: 40,
+                                  child: Row(
                                     mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Icon(
-                                        UniconsLine.file,
-                                        size: 50,
-                                        color: ColorService().mainTextColor,
-                                      ),
-                                      Text(
-                                        'ຍັງບໍ່ມີຟາຍ',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
+                                      Text(p.basename(file.path)),
+                                      GestureDetector(
+                                        onTap: () => context
+                                            .read<FileProvider>()
+                                            .deleteFile(index),
+                                        child: Icon(
+                                          UniconsLine.trash,
+                                          color: Colors.red.shade400,
                                         ),
                                       ),
                                     ],
-                                  )
-                                : ListView.builder(
-                                    itemCount: files.length,
-                                    itemBuilder: (context, index) {
-                                      final file = files[index];
-                                      return Container(
-                                        width: double.infinity,
-                                        height: 40,
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment
-                                                  .spaceBetween,
-                                          children: [
-                                            Text(p.basename(file.path)),
-                                            GestureDetector(
-                                              onTap: () => context
-                                                  .read<FileProvider>()
-                                                  .deleteFile(index),
-                                              child: Icon(
-                                                UniconsLine.trash,
-                                                color: Colors.red.shade400,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
                                   ),
-                          ),
-                        ),
-                        _buildBottomButton(files),
-                      ],
+                                );
+                              },
+                            ),
                     ),
                   ),
-                  Container(),
+                  _buildBottomButton(files),
+                  Container()
                 ],
               ),
             ),
           ),
+          Container(),
         ],
       ),
     );
