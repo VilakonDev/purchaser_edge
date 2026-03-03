@@ -15,6 +15,7 @@ class AllDocumentPage extends StatefulWidget {
 class _AllDocumentPageState extends State<AllDocumentPage> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
+  final Map<int, int> _documentRotations = {};
 
   @override
   void dispose() {
@@ -176,6 +177,10 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                             _buildActionButton(
                                               icon: UniconsLine.eye,
                                               color: Colors.blue,
+                                              onPressed: () {
+                                                _showDocumentPreview(
+                                                    context, index);
+                                              },
                                             ),
                                             _buildActionButton(
                                               icon: UniconsLine.edit,
@@ -207,15 +212,146 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required Color color}) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    VoidCallback? onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: Colors.white, size: 18),
       ),
-      child: Icon(icon, color: Colors.white, size: 18),
+    );
+  }
+
+  void _showDocumentPreview(BuildContext context, int documentIndex) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              contentPadding: EdgeInsets.zero,
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.6,
+                height: MediaQuery.of(context).size.height * 0.6,
+                child: Stack(
+                  children: [
+                    // Document Preview Area
+                    Container(
+                      color: Colors.grey[200],
+                      child: Center(
+                        child: Stack(
+                          children: [
+                            Transform.rotate(
+                              angle: ((_documentRotations[documentIndex] ?? 0) *
+                                      3.14159 /
+                                      180)
+                                  .toDouble(),
+                              child: Container(
+                                width: 200,
+                                height: 280,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.grey.withOpacity(0.3),
+                                      blurRadius: 8,
+                                    )
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      UniconsLine.file,
+                                      size: 60,
+                                      color: Colors.blue,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'PO-2026-00$documentIndex',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            // Rotate Button (Top Right of Thumbnail)
+                            Positioned(
+                              top: 5,
+                              right: 5,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blue.withOpacity(0.5),
+                                      blurRadius: 8,
+                                    )
+                                  ],
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    UniconsLine.redo,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _documentRotations[documentIndex] =
+                                          (_documentRotations[documentIndex] ??
+                                                  0) +
+                                              90;
+                                    });
+                                  },
+                                  constraints: const BoxConstraints(
+                                    minWidth: 40,
+                                    minHeight: 40,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  iconSize: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Close Button (Top Left)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -228,6 +364,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
+        spacing: 10,
         children: [
           Expanded(
             child: DropDownWidget(

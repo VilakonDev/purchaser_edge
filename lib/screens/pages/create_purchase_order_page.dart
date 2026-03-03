@@ -22,6 +22,8 @@ class CreatePurchaseOrderPage extends StatefulWidget {
 }
 
 class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
+  bool _isDragOverDropZone = false;
+
   void pickFiles() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -35,9 +37,16 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
     }
   }
 
+  void _handleDropFiles(PointerEvent event) {
+    // Handle file drop
+    if (event is PointerDownEvent) {
+      _isDragOverDropZone = true;
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // ✅ watch ที่เดียว ครอบทุกอย่าง
     final files = context.watch<FileProvider>().files;
 
     return Container(
@@ -71,54 +80,89 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                             color: ColorService().mainTextColor,
                           ),
                         ),
-                        Container(
-                          width: double.infinity,
-                          height: 300,
-                          decoration: BoxDecoration(
-                            color: ColorService().mainTextFiledColor,
-                            border: Border.all(
-                              color: ColorService().borderTextFiledColor,
-                              width: 3,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                UniconsLine.cloud_upload,
-                                size: 120,
-                                color: ColorService().mainTextColor,
+                        DragTarget<List<File>>(
+                          onAcceptWithDetails: (details) {
+                            setState(() {
+                              _isDragOverDropZone = false;
+                            });
+                          },
+                          onLeave: (data) {
+                            setState(() {
+                              _isDragOverDropZone = false;
+                            });
+                          },
+                          onMove: (details) {
+                            setState(() {
+                              _isDragOverDropZone = true;
+                            });
+                          },
+                          builder: (context, candidateData, rejectedData) {
+                            return Container(
+                              width: double.infinity,
+                              height: 300,
+                              decoration: BoxDecoration(
+                                color: _isDragOverDropZone
+                                    ? ColorService()
+                                        .primaryColor
+                                        .withOpacity(0.1)
+                                    : ColorService().mainTextFiledColor,
+                                border: Border.all(
+                                  color: _isDragOverDropZone
+                                      ? ColorService().primaryColor
+                                      : ColorService().borderTextFiledColor,
+                                  width: 3,
+                                  style: _isDragOverDropZone
+                                      ? BorderStyle.solid
+                                      : BorderStyle.solid,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                spacing: 20,
-                                children: [
-                                  Text(
-                                    'ລາກ ແລະ ວາງຟາຍ ຫຼື',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: ColorService().mainTextColor,
+                              child: GestureDetector(
+                                onTap: pickFiles,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      UniconsLine.cloud_upload,
+                                      size: 120,
+                                      color: _isDragOverDropZone
+                                          ? ColorService().primaryColor
+                                          : ColorService().mainTextColor,
                                     ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: pickFiles,
-                                    child: Text(
-                                      'ກົດເພື່ອເລືອກຟາຍ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                        color: ColorService().primaryColor,
-                                      ),
+                                    SizedBox(height: 20),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      spacing: 20,
+                                      children: [
+                                        Text(
+                                          'ລາກ ແລະ ວາງຟາຍ ຫຼື',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: _isDragOverDropZone
+                                                ? ColorService().primaryColor
+                                                : ColorService()
+                                                    .mainTextColor,
+                                          ),
+                                        ),
+                                        Text(
+                                          'ກົດເພື່ອເລືອກຟາຍ',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                            color: ColorService()
+                                                .primaryColor,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
-
                         Expanded(
                           child: Container(
                             padding: EdgeInsets.all(10),
@@ -130,7 +174,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                             child: files.isEmpty
                                 ? Column(
                                     spacing: 10,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
                                     children: [
                                       Icon(
                                         UniconsLine.file,
@@ -155,7 +200,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                         height: 40,
                                         child: Row(
                                           mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                              MainAxisAlignment
+                                                  .spaceBetween,
                                           children: [
                                             Text(p.basename(file.path)),
                                             GestureDetector(
