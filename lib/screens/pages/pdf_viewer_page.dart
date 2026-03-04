@@ -9,142 +9,328 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:pdfrx/pdfrx.dart' as rx;
 import 'package:purchaser_edge/providers/file_provider.dart';
 
+// ─── A4 (PDF points = 1/72 inch) ─────────────────────────────
+// Portrait : 595.28 × 841.89
+// Landscape: 841.89 × 595.28
+const double _a4W = 595.28;
+const double _a4H = 841.89;
+const double _pad = 28.35; // 10 mm
+
+// ─── Thumbnail sizing ─────────────────────────────────────────
+// Portrait  thumbnail : width=112, height=112×(842/595)≈158  → aspect 595/842
+// Landscape thumbnail : width=112, height=112×(595/842)≈79   → aspect 842/595
+const double _thumbW = 112.0;
+
 class PDFViewerHome extends StatefulWidget {
   const PDFViewerHome({super.key});
-
   @override
   State<PDFViewerHome> createState() => _PDFViewerHomeState();
 }
 
 class _PDFViewerHomeState extends State<PDFViewerHome> {
-  int _currentPage = 1;
-  int _totalPages = 0;
-  int _selectedThumbnail = 0;
+  int  _currentPage    = 1;
+  int  _totalPages     = 0;
+  int  _selectedThumb  = 0;
   bool _sidebarVisible = true;
+  bool _isRotating     = false;
+
+  Key _viewerKey     = const ValueKey(0);
+  int _viewerVersion = 0;
 
   final PdfViewerController _controller = PdfViewerController();
+  Future<_PDFData>? _pdfFuture;
 
-  Future<_PDFData>? _pdfDataFuture;
-  Uint8List? _mergedBytes;
+  /// ต้นฉบับ raw merge — ไม่เคยเปลี่ยน
+  Uint8List? _srcBytes;
 
-  // ✅ cache แค่ 15 หน้า — ป้องกัน RAM ล้น
-  final Map<int, Uint8List> _thumbCache = {};
-  static const int _maxCacheSize = 15;
+  /// bytes ที่ viewer ใช้ (หลัง rotate+normalize)
+  Uint8List? _displayBytes;
+
+  /// rotation สะสมต่อหน้า: 0 / 90 / 180 / 270
+  final Map<int, int> _rotations = {};
+
+  /// thumbnail cache — key = "idx_deg"
+  final Map<String, Uint8List> _thumbCache = {};
+  static const int _maxCache = 20;
+
+  // ══════════════════════════════════════════════════════════════
+  // LIFECYCLE
+  // ══════════════════════════════════════════════════════════════
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final files = context.read<FileProvider>().files;
-    if (files.isNotEmpty && _pdfDataFuture == null) {
-      _pdfDataFuture = _prepareData(files);
+    if (files.isNotEmpty && _pdfFuture == null) {
+      _pdfFuture = _init(files);
     }
   }
 
   @override
   void dispose() {
     _thumbCache.clear();
-    _mergedBytes = null;
     super.dispose();
   }
 
-  // ── Step 1: Merge files (ทีละไฟล์ ไม่โหลดพร้อมกัน) ────────
-  Future<Uint8List> _mergeFiles(List<File> files) async {
-    final mergedDoc = sf.PdfDocument();
+  // ══════════════════════════════════════════════════════════════
+  // HELPERS — PURE MATH (ไม่มี side-effect)
+  // ══════════════════════════════════════════════════════════════
 
-    for (final file in files) {
-      // อ่านทีละไฟล์ dispose ทันทีหลังใช้
-      final bytes = await file.readAsBytes();
-      final srcDoc = sf.PdfDocument(inputBytes: bytes);
-
-      for (int i = 0; i < srcDoc.pages.count; i++) {
-        final srcPage = srcDoc.pages[i];
-        final pageSize = srcPage.size;
-
-        final section = mergedDoc.sections!.add();
-        section.pageSettings.margins.all = 0;
-        section.pageSettings.size = pageSize;
-
-        final newPage = section.pages.add();
-        newPage.graphics.drawPdfTemplate(
-          srcPage.createTemplate(),
-          Offset.zero,
-          Size(pageSize.width, pageSize.height),
-        );
-      }
-
-      // ✅ dispose ทันทีหลังใช้ ไม่ค้างใน RAM
-      srcDoc.dispose();
-    }
-
-    final mergedBytes = Uint8List.fromList(await mergedDoc.save());
-    mergedDoc.dispose();
-    return mergedBytes;
+  /// aspect ratio ของ thumbnail สำหรับหน้า [idx]
+  /// portrait  → 595/842 ≈ 0.707   (สูงกว่ากว้าง)
+  /// landscape → 842/595 ≈ 1.415   (กว้างกว่าสูง)
+  double _thumbAspect(int idx) {
+    final bool land = _isLandscape(idx);
+    return land ? (_a4H / _a4W) : (_a4W / _a4H);
   }
 
-  // ── Step 2: นับหน้าอย่างเดียว ไม่ render ทั้งหมด ───────────
-  Future<_PDFData> _prepareData(List<File> files) async {
-    final mergedBytes = await _mergeFiles(files);
-    _mergedBytes = mergedBytes;
+  /// page นี้อยู่ใน landscape หรือเปล่า
+  bool _isLandscape(int idx) {
+    final deg = _rotations[idx] ?? 0;
+    return deg == 90 || deg == 270;
+  }
 
-    // เปิดแค่เพื่อนับหน้า แล้ว dispose ทันที
-    final doc = await rx.PdfDocument.openData(mergedBytes);
-    final pageCount = doc.pages.length;
+  // ══════════════════════════════════════════════════════════════
+  // PDF PROCESSING
+  // ══════════════════════════════════════════════════════════════
+
+  /// Step 1: merge ไฟล์ดิบ — เก็บขนาดต้นฉบับ
+  Future<Uint8List> _mergeRaw(List<File> files) async {
+    final doc = sf.PdfDocument();
+    for (final f in files) {
+      final bytes = await f.readAsBytes();
+      final src   = sf.PdfDocument(inputBytes: bytes);
+      for (int i = 0; i < src.pages.count; i++) {
+        final sp  = src.pages[i];
+        final sec = doc.sections!.add();
+        sec.pageSettings
+          ..margins.all = 0
+          ..size        = sp.size;
+        sec.pages.add().graphics
+            .drawPdfTemplate(sp.createTemplate(), Offset.zero, sp.size);
+      }
+      src.dispose();
+    }
+    final out = Uint8List.fromList(await doc.save());
+    doc.dispose();
+    return out;
+  }
+
+  /// Step 2: สร้าง display PDF
+  ///
+  /// สำหรับแต่ละหน้า:
+  ///   deg 0/180  → page = A4 Portrait  (595 × 842)
+  ///   deg 90/270 → page = A4 Landscape (842 × 595)
+  ///
+  /// วิธีการ (render-to-image ไม่ใช้ transform):
+  ///   1. render ต้นฉบับเป็น PNG @2x
+  ///   2. หมุน PNG ด้วย Flutter Canvas (แม่นยำ 100%)
+  ///   3. scale-to-fit ลงใน A4 area (หัก _pad รอบทุกด้าน)
+  ///   4. วาง image กึ่งกลาง page
+  Future<Uint8List> _buildDisplay(
+    Uint8List srcBytes,
+    Map<int, int> rotations,
+  ) async {
+    final srcDoc = sf.PdfDocument(inputBytes: srcBytes);
+    final outDoc = sf.PdfDocument();
+
+    // เปิด rxDoc ครั้งเดียว reuse ทุกหน้า
+    final rxDoc = await rx.PdfDocument.openData(srcBytes);
+
+    for (int i = 0; i < srcDoc.pages.count; i++) {
+      final deg = rotations[i] ?? 0;
+
+      // ── A. Render page ต้นฉบับ @2x ──────────────────────────
+      final rxPage = rxDoc.pages[i];
+      const double rScale = 2.0;
+      final double rW = rxPage.width  * rScale;
+      final double rH = rxPage.height * rScale;
+
+      final rendered = await rxPage.render(
+        fullWidth: rW, fullHeight: rH,
+        backgroundColor: 0xFFFFFFFF,
+      );
+      final uiImg   = await rendered?.createImage();
+      final imgData = await uiImg?.toByteData(format: ui.ImageByteFormat.png);
+      uiImg?.dispose();
+
+      if (imgData == null) continue;
+      final rawPng = imgData.buffer.asUint8List();
+
+      // ── B. หมุน PNG (Flutter Canvas) ─────────────────────────
+      final Uint8List rotPng = deg == 0
+          ? rawPng
+          : await _rotatePng(rawPng, deg, rW.round(), rH.round());
+
+      // ขนาด image หลัง rotate (pixels)
+      final bool   swap = (deg == 90 || deg == 270);
+      final double iW   = swap ? rH : rW;
+      final double iH   = swap ? rW : rH;
+
+      // ── C. กำหนดขนาด output page ─────────────────────────────
+      //   Portrait  (deg 0/180)  → 595 × 842
+      //   Landscape (deg 90/270) → 842 × 595
+      final bool   land  = swap;
+      final double pageW = land ? _a4H : _a4W;
+      final double pageH = land ? _a4W : _a4H;
+
+      // area หลังหัก padding
+      final double areaW = pageW - _pad * 2;
+      final double areaH = pageH - _pad * 2;
+
+      // scale-to-fit (เลือก scale ที่น้อยกว่า เพื่อไม่ล้น area)
+      final double s  = (areaW / iW) < (areaH / iH)
+          ? (areaW / iW)
+          : (areaH / iH);
+      final double dW = iW * s;
+      final double dH = iH * s;
+
+      // จัดกึ่งกลาง
+      final double ox = _pad + (areaW - dW) / 2;
+      final double oy = _pad + (areaH - dH) / 2;
+
+      // ── D. สร้าง output page ─────────────────────────────────
+      final sec = outDoc.sections!.add();
+      sec.pageSettings
+        ..margins.all = 0
+        ..size        = Size(pageW, pageH);
+      final np = sec.pages.add();
+      final g  = np.graphics;
+
+      g.drawRectangle(
+        brush : sf.PdfSolidBrush(sf.PdfColor(255, 255, 255)),
+        bounds: Rect.fromLTWH(0, 0, pageW, pageH),
+      );
+      g.drawImage(sf.PdfBitmap(rotPng), Rect.fromLTWH(ox, oy, dW, dH));
+    }
+
+    await rxDoc.dispose();
+    srcDoc.dispose();
+    final out = Uint8List.fromList(await outDoc.save());
+    outDoc.dispose();
+    return out;
+  }
+
+  /// หมุน PNG ด้วย Flutter Canvas — ถูกต้อง 100% ไม่มี drift
+  Future<Uint8List> _rotatePng(
+    Uint8List png, int deg, int origW, int origH,
+  ) async {
+    final codec = await ui.instantiateImageCodec(png);
+    final frame = await codec.getNextFrame();
+    final src   = frame.image;
+
+    final bool swap = (deg == 90 || deg == 270);
+    final int  outW = swap ? origH : origW;
+    final int  outH = swap ? origW : origH;
+
+    final rec    = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+
+    canvas.translate(outW / 2.0, outH / 2.0);
+    canvas.rotate(deg * 3.141592653589793 / 180.0);
+    canvas.translate(-origW / 2.0, -origH / 2.0);
+    canvas.drawImage(src, Offset.zero, Paint());
+    src.dispose();
+
+    final pic    = rec.endRecording();
+    final outImg = await pic.toImage(outW, outH);
+    final bdata  = await outImg.toByteData(format: ui.ImageByteFormat.png);
+    outImg.dispose();
+
+    return bdata!.buffer.asUint8List();
+  }
+
+  // ── Init ─────────────────────────────────────────────────────
+  Future<_PDFData> _init(List<File> files) async {
+    _srcBytes     = await _mergeRaw(files);
+    _displayBytes = await _buildDisplay(_srcBytes!, {});
+
+    final doc   = await rx.PdfDocument.openData(_displayBytes!);
+    final count = doc.pages.length;
     await doc.dispose();
 
-    return _PDFData(mergedBytes: mergedBytes, pageCount: pageCount);
+    return _PDFData(pageCount: count);
   }
 
-  // ── Render เฉพาะหน้าที่ขอ (Lazy) ──────────────────────────
-  Future<Uint8List?> _renderOnePage(int pageIndex) async {
-    // คืนจาก cache ถ้ามี
-    if (_thumbCache.containsKey(pageIndex)) {
-      return _thumbCache[pageIndex];
+  // ── Rotate single page ───────────────────────────────────────
+  Future<void> _rotatePage(int idx) async {
+    if (_isRotating || _srcBytes == null) return;
+    setState(() => _isRotating = true);
+
+    _rotations[idx] = ((_rotations[idx] ?? 0) + 90) % 360;
+    // ไม่ต้อง clear cache แบบ manual เพราะ version เปลี่ยนทำให้ cache miss อัตโนมัติ
+
+    _displayBytes = await _buildDisplay(_srcBytes!, _rotations);
+    _viewerVersion++;
+
+    setState(() {
+      _viewerKey  = ValueKey(_viewerVersion);
+      _isRotating = false;
+    });
+  }
+
+  // ── Rotate all pages ─────────────────────────────────────────
+  Future<void> _rotateAll(int count) async {
+    if (_isRotating || _srcBytes == null) return;
+    setState(() => _isRotating = true);
+
+    for (int i = 0; i < count; i++) {
+      _rotations[i] = ((_rotations[i] ?? 0) + 90) % 360;
     }
+    _thumbCache.clear();
 
-    if (_mergedBytes == null) return null;
+    _displayBytes = await _buildDisplay(_srcBytes!, _rotations);
+    _viewerVersion++;
 
-    // เปิด document เฉพาะหน้านี้ แล้ว dispose ทันที
-    final doc = await rx.PdfDocument.openData(_mergedBytes!);
-    final page = doc.pages[pageIndex];
+    setState(() {
+      _viewerKey  = ValueKey(_viewerVersion);
+      _isRotating = false;
+    });
+  }
 
-    const maxW = 150.0;
-    final scale = maxW / page.width;
+  /// Render thumbnail จาก _displayBytes (ซึ่ง rotate + normalize แล้ว)
+  /// cache key รวม _viewerVersion เพื่อ invalidate ทุกครั้งที่ _displayBytes เปลี่ยน
+  Future<Uint8List?> _thumb(int idx, int version) async {
+    final cacheKey = '${idx}_v$version';
+    if (_thumbCache.containsKey(cacheKey)) return _thumbCache[cacheKey];
+    if (_displayBytes == null) return null;
 
-    final pageImage = await page.render(
-      fullWidth: page.width * scale,
-      fullHeight: page.height * scale,
+    final doc  = await rx.PdfDocument.openData(_displayBytes!);
+    final page = doc.pages[idx];
+
+    // render ให้พอดีกับ _thumbW — height ตาม aspect จริงของ display page
+    final double tH = _thumbW * (page.height / page.width);
+    final img = await page.render(
+      fullWidth: _thumbW, fullHeight: tH,
       backgroundColor: 0xFFFFFFFF,
     );
+    final uiImg = await img?.createImage();
+    final bdata = await uiImg?.toByteData(format: ui.ImageByteFormat.png);
+    uiImg?.dispose();
+    await doc.dispose();
 
-    final uiImage = await pageImage?.createImage();
-    final byteData = await uiImage?.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    uiImage?.dispose();
-    await doc.dispose(); // ✅ dispose ทันทีหลังใช้
-
-    final result = byteData?.buffer.asUint8List();
+    final result = bdata?.buffer.asUint8List();
     if (result != null) {
-      // ✅ ถ้า cache เต็ม ลบหน้าเก่าสุดออกก่อน
-      if (_thumbCache.length >= _maxCacheSize) {
+      if (_thumbCache.length >= _maxCache) {
         _thumbCache.remove(_thumbCache.keys.first);
       }
-      _thumbCache[pageIndex] = result;
+      _thumbCache[cacheKey] = result;
     }
     return result;
   }
 
-  void _goToPage(int page) {
-    setState(() {
-      _selectedThumbnail = page - 1;
-      _currentPage = page;
-    });
+  void _goTo(int page) {
+    setState(() { _selectedThumb = page - 1; _currentPage = page; });
     _controller.jumpToPage(page);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
-    final files = context.watch<FileProvider>().files;
+    final files  = context.watch<FileProvider>().files;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -165,13 +351,22 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
           ),
         ]),
         actions: [
+          if (_isRotating)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2),
+                ),
+              ),
+            ),
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Text(
-                '$_currentPage / $_totalPages',
-                style: const TextStyle(color: Colors.white70),
-              ),
+              child: Text('$_currentPage / $_totalPages',
+                  style: const TextStyle(color: Colors.white70)),
             ),
           ),
           IconButton(
@@ -185,124 +380,127 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
         ],
       ),
       body: files.isEmpty
-          ? _buildEmptyState()
+          ? _emptyState()
           : FutureBuilder<_PDFData>(
-              future: _pdfDataFuture,
-              builder: (context, snapshot) {
-
-                // ── Loading ──────────────────────────────
-                if (snapshot.connectionState == ConnectionState.waiting) {
+              future: _pdfFuture,
+              builder: (ctx, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const CircularProgressIndicator(
-                            color: Color(0xFF1A73E8)),
+                        const CircularProgressIndicator(color: Color(0xFF1A73E8)),
                         const SizedBox(height: 16),
                         Text(
                           files.length > 1
                               ? 'Merging ${files.length} files...'
                               : 'Loading PDF...',
-                          style: const TextStyle(
-                              color: Colors.grey, fontSize: 13),
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
                         ),
                       ],
                     ),
                   );
                 }
-
-                // ── Error ────────────────────────────────
-                if (snapshot.hasError || !snapshot.hasData) {
+                if (snap.hasError || !snap.hasData) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.red, size: 48),
+                        const Icon(Icons.error_outline, color: Colors.red, size: 48),
                         const SizedBox(height: 12),
-                        Text(
-                          'Error: ${snapshot.error}',
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
+                        Text('Error: ${snap.error}',
+                            style: const TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center),
                       ],
                     ),
                   );
                 }
 
-                // ── Success ──────────────────────────────
-                final data = snapshot.data!;
+                final data = snap.data!;
                 return Row(children: [
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     width: _sidebarVisible ? 200 : 0,
                     child: _sidebarVisible
-                        ? _buildSidebar(data.pageCount, isDark)
+                        ? _sidebar(data.pageCount, isDark)
                         : const SizedBox.shrink(),
                   ),
                   if (_sidebarVisible)
                     const VerticalDivider(width: 1, thickness: 1),
-                  Expanded(
-                    child: _buildPDFViewer(data.mergedBytes),
-                  ),
+                  Expanded(child: _viewer()),
                 ]);
               },
             ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.picture_as_pdf_outlined,
-              size: 80, color: Color(0xFF1A73E8)),
-          SizedBox(height: 16),
-          Text('No PDF Files',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          SizedBox(height: 8),
-          Text('ຍັງບໍ່ມີໄຟລ໌ PDF ກະລຸນາເພີ່ມໄຟລ໌ຈາກໜ້າກ່ອນ',
-              style: TextStyle(color: Colors.grey)),
-        ],
-      ),
-    );
-  }
+  Widget _emptyState() => const Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.picture_as_pdf_outlined, size: 80, color: Color(0xFF1A73E8)),
+        SizedBox(height: 16),
+        Text('No PDF Files',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        SizedBox(height: 8),
+        Text('ຍັງບໍ່ມີໄຟລ໌ PDF ກະລຸນາເພີ່ມໄຟລ໌ຈາກໜ້າກ່ອນ',
+            style: TextStyle(color: Colors.grey)),
+      ],
+    ),
+  );
 
-  // ── Sidebar: ใช้ ListView lazy — render เฉพาะที่เห็น ────────
-  Widget _buildSidebar(int pageCount, bool isDark) {
+  // ── Sidebar ──────────────────────────────────────────────────
+  Widget _sidebar(int pageCount, bool isDark) {
     return Container(
       color: isDark ? const Color(0xFF252525) : const Color(0xFFEEEEEE),
       child: Column(children: [
 
+        // header
         Container(
           width: double.infinity,
           color: isDark ? const Color(0xFF2D2D2D) : const Color(0xFFE0E0E0),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Text(
-            'Pages ($pageCount)',
-            style: const TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w600),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(children: [
+            Expanded(
+              child: Text('Pages ($pageCount)',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            ),
+            Tooltip(
+              message: 'หมุนทุกหน้า 90°',
+              child: InkWell(
+                onTap: _isRotating ? null : () => _rotateAll(pageCount),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.rotate_right, size: 16,
+                      color: _isRotating
+                          ? Colors.grey
+                          : (isDark ? Colors.white70 : const Color(0xFF555555))),
+                ),
+              ),
+            ),
+          ]),
         ),
 
+        // thumbnail list
         Expanded(
-          // ✅ ListView.builder — render เฉพาะ item ที่อยู่บน screen
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: pageCount,
-            // ✅ cacheExtent ต่ำ — ไม่ pre-render ล่วงหน้าเยอะ
-            cacheExtent: 300,
-            itemBuilder: (context, index) {
-              final pageNum = index + 1;
-              final isSelected = _selectedThumbnail == index;
+            cacheExtent: 400,
+            itemBuilder: (ctx, index) {
+              final isSelected = _selectedThumb == index;
+              final deg        = _rotations[index] ?? 0;
+              // capture version เพื่อ pass ลง _thumb() และ ValueKey
+              final int    ver    = _viewerVersion;
+              // aspect ratio ของ thumbnail: เปลี่ยนเมื่อ rotate
+              final double aspect = _thumbAspect(index);
 
               return GestureDetector(
-                onTap: () => _goToPage(pageNum),
+                onTap: () => _goTo(index + 1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF1A73E8).withOpacity(0.15)
@@ -316,60 +514,81 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
                     ),
                   ),
                   child: Column(children: [
-                    Container(
-                      margin: const EdgeInsets.all(6),
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.15),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      // ✅ render ทีละหน้า เฉพาะที่ ListView สร้าง
-                      child: FutureBuilder<Uint8List?>(
-                        future: _renderOnePage(index),
-                        builder: (context, snap) {
-                          if (snap.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: Color(0xFF1A73E8),
-                                ),
-                              ),
-                            );
-                          }
-                          if (!snap.hasData || snap.data == null) {
-                            return const Center(
-                              child: Icon(Icons.broken_image,
-                                  color: Colors.grey, size: 30),
-                            );
-                          }
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Image.memory(
-                              snap.data!,
-                              fit: BoxFit.contain,
-                              width: double.infinity,
-                              // ✅ ลด memory ของ image decoder
-                              cacheWidth: 150,
+                    Stack(children: [
+                      // ✅ Container ปรับ aspect ratio ตาม portrait/landscape
+                      Container(
+                        margin: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
                             ),
-                          );
-                        },
+                          ],
+                        ),
+                        child: AspectRatio(
+                          aspectRatio: aspect,
+                          child: FutureBuilder<Uint8List?>(
+                            // key เปลี่ยนเมื่อ deg เปลี่ยน → rebuild + re-fetch
+                            key: ValueKey('t_${index}_$ver'),
+                            future: _thumb(index, ver),
+                            builder: (ctx, snap) {
+                              if (snap.connectionState == ConnectionState.waiting) {
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 20, height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: Color(0xFF1A73E8)),
+                                  ),
+                                );
+                              }
+                              if (!snap.hasData || snap.data == null) {
+                                return const Center(
+                                  child: Icon(Icons.broken_image,
+                                      color: Colors.grey, size: 24),
+                                );
+                              }
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.memory(
+                                  snap.data!,
+                                  fit: BoxFit.fill, // fill เพราะ aspect ratio ถูกต้องแล้ว
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
+
+                      // ✅ ปุ่ม rotate ต่อหน้า
+                      Positioned(
+                        top: 6, right: 6,
+                        child: GestureDetector(
+                          onTap: _isRotating ? null : () => _rotatePage(index),
+                          child: Container(
+                            width: 22, height: 22,
+                            decoration: BoxDecoration(
+                              color: _isRotating
+                                  ? Colors.grey.withOpacity(0.55)
+                                  : Colors.black.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(Icons.rotate_right,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ]),
+
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        '$pageNum',
+                      child: Text('${index + 1}',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: isSelected
@@ -377,9 +596,7 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
                               : FontWeight.normal,
                           color: isSelected
                               ? const Color(0xFF1A73E8)
-                              : (isDark
-                                  ? Colors.white60
-                                  : Colors.black54),
+                              : (isDark ? Colors.white60 : Colors.black54),
                         ),
                       ),
                     ),
@@ -393,21 +610,31 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
     );
   }
 
-  Widget _buildPDFViewer(Uint8List pdfBytes) {
+  // ── Viewer ───────────────────────────────────────────────────
+  Widget _viewer() {
+    final bytes = _displayBytes;
+    if (bytes == null) return const SizedBox.shrink();
+
     return SfPdfViewer.memory(
-      pdfBytes,
-      key: const ValueKey('merged_pdf'),
+      bytes,
+      key: _viewerKey,
       controller: _controller,
       pageLayoutMode: PdfPageLayoutMode.continuous,
       scrollDirection: PdfScrollDirection.vertical,
       canShowScrollHead: true,
+      pageSpacing: 8,
+     
       onDocumentLoaded: (details) {
+        final page = _currentPage;
         setState(() => _totalPages = details.document.pages.count);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (page > 1) _controller.jumpToPage(page);
+        });
       },
       onPageChanged: (details) {
         setState(() {
-          _currentPage = details.newPageNumber;
-          _selectedThumbnail = details.newPageNumber - 1;
+          _currentPage   = details.newPageNumber;
+          _selectedThumb = details.newPageNumber - 1;
         });
       },
     );
@@ -415,7 +642,6 @@ class _PDFViewerHomeState extends State<PDFViewerHome> {
 }
 
 class _PDFData {
-  final Uint8List mergedBytes;
   final int pageCount;
-  const _PDFData({required this.mergedBytes, required this.pageCount});
+  const _PDFData({required this.pageCount});
 }

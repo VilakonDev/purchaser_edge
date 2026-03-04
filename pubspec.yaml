@@ -46,6 +46,9 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^32.2.7
   pdfrx: ^2.2.24
   syncfusion_flutter_pdf: ^32.2.7
+  shared_preferences: ^2.5.4
+  http: ^1.6.0
+  device_info_plus: ^12.3.0
 
 dev_dependencies:
   flutter_test:

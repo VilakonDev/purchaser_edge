@@ -75,7 +75,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                   height: 40,
                                   decoration: BoxDecoration(
                                     gradient: ColorService().mainGredientColor,
-                                    borderRadius: BorderRadius.circular(10)
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                   padding: EdgeInsets.symmetric(horizontal: 20),
                                   child: Row(
@@ -85,7 +85,10 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                         'ເພີ່ມເອກະສານ',
                                         style: TextStyle(color: Colors.white),
                                       ),
-                                      Icon(UniconsLine.paperclip,color: Colors.white,)
+                                      Icon(
+                                        UniconsLine.paperclip,
+                                        color: Colors.white,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -99,20 +102,21 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                   children: [
                                     Icon(
                                       UniconsLine.file,
-                                      size: 50,
-                                      color: ColorService().mainTextColor,
+                                      size: 100,
+                                      color: Colors.grey.shade300,
                                     ),
                                     Text(
                                       'ຍັງບໍ່ມີຟາຍ',
                                       style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+
+                                        color: Colors.grey[800],
                                       ),
                                     ),
                                   ],
                                 )
                               : Expanded(
-                                child: ListView.builder(
+                                  child: ListView.builder(
                                     itemCount: files.length,
                                     itemBuilder: (context, index) {
                                       final file = files[index];
@@ -138,8 +142,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                       );
                                     },
                                   ),
-                              ),
-                          Container(height: 50,),
+                                ),
+                          Container(height: 50),
                         ],
                       ),
                     ),
@@ -241,7 +245,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 color: files.isEmpty
                     ? Colors.transparent
                     : ColorService().primaryColor,
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 spacing: 10,
@@ -278,7 +282,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                     color: ColorService().mainTextFiledColor,
                   ),
                   color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   spacing: 10,
@@ -303,7 +307,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                   height: 50,
                   decoration: BoxDecoration(
                     color: ColorService().primaryColor,
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     spacing: 10,

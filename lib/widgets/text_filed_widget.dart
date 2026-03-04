@@ -31,6 +31,7 @@ class _TextFiledWidgetState extends State<TextFiledWidget> {
           width: double.infinity,
           height: 40,
           child: TextField(
+            controller: widget.controller,
             decoration: InputDecoration(
               filled: true,
               contentPadding: EdgeInsets.all(5),
