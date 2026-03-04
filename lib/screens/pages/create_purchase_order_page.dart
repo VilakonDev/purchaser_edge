@@ -55,62 +55,97 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
 
                   Expanded(
                     child: Container(
-                      
                       padding: EdgeInsets.all(10),
                       width: double.infinity,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: files.isEmpty
-                          ? Column(
-                              spacing: 10,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  UniconsLine.file,
-                                  size: 50,
-                                  color: ColorService().mainTextColor,
-                                ),
-                                Text(
-                                  'ຍັງບໍ່ມີຟາຍ',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ListView.builder(
-                              itemCount: files.length,
-                              itemBuilder: (context, index) {
-                                final file = files[index];
-                                return Container(
-                                  width: double.infinity,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  pickFiles();
+                                },
+                                child: Container(
                                   height: 40,
+                                  decoration: BoxDecoration(
+                                    gradient: ColorService().mainGredientColor,
+                                    borderRadius: BorderRadius.circular(10)
+                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 20),
                                   child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    spacing: 10,
                                     children: [
-                                      Text(p.basename(file.path)),
-                                      GestureDetector(
-                                        onTap: () => context
-                                            .read<FileProvider>()
-                                            .deleteFile(index),
-                                        child: Icon(
-                                          UniconsLine.trash,
-                                          color: Colors.red.shade400,
-                                        ),
+                                      Text(
+                                        'ເພີ່ມເອກະສານ',
+                                        style: TextStyle(color: Colors.white),
                                       ),
+                                      Icon(UniconsLine.paperclip,color: Colors.white,)
                                     ],
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          files.isEmpty
+                              ? Column(
+                                  spacing: 10,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      UniconsLine.file,
+                                      size: 50,
+                                      color: ColorService().mainTextColor,
+                                    ),
+                                    Text(
+                                      'ຍັງບໍ່ມີຟາຍ',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Expanded(
+                                child: ListView.builder(
+                                    itemCount: files.length,
+                                    itemBuilder: (context, index) {
+                                      final file = files[index];
+                                      return Container(
+                                        width: double.infinity,
+                                        height: 40,
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(p.basename(file.path)),
+                                            GestureDetector(
+                                              onTap: () => context
+                                                  .read<FileProvider>()
+                                                  .deleteFile(index),
+                                              child: Icon(
+                                                UniconsLine.trash,
+                                                color: Colors.red.shade400,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ),
+                          Container(height: 50,),
+                        ],
+                      ),
                     ),
                   ),
                   _buildBottomButton(files),
-                  Container()
+                  Container(),
                 ],
               ),
             ),

@@ -139,16 +139,13 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     cells: [
                                       DataCell(Text('PO-2026-00$index')),
                                       const DataCell(Text('ໃບສັ່ງຊື້ສິນຄ້າ')),
-                                      const DataCell(
-                                        Text(
-                                          'ວັດສະດຸໂຄງສ້າງ',
-                                        ),
-                                      ),
+                                      const DataCell(Text('ວັດສະດຸໂຄງສ້າງ')),
                                       const DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
                                       DataCell(
                                         Text(
-                                          DateFormat('EEE, M/d/y')
-                                              .format(DateTime.now()),
+                                          DateFormat(
+                                            'EEE, M/d/y',
+                                          ).format(DateTime.now()),
                                         ),
                                       ),
                                       DataCell(
@@ -157,8 +154,9 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                           height: 36,
                                           decoration: BoxDecoration(
                                             color: Colors.green,
-                                            borderRadius:
-                                                BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
                                           child: const Center(
                                             child: Text(
@@ -179,7 +177,9 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                               color: Colors.blue,
                                               onPressed: () {
                                                 _showDocumentPreview(
-                                                    context, index);
+                                                  context,
+                                                  index,
+                                                );
                                               },
                                             ),
                                             _buildActionButton(
@@ -252,10 +252,11 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                         child: Stack(
                           children: [
                             Transform.rotate(
-                              angle: ((_documentRotations[documentIndex] ?? 0) *
-                                      3.14159 /
-                                      180)
-                                  .toDouble(),
+                              angle:
+                                  ((_documentRotations[documentIndex] ?? 0) *
+                                          3.14159 /
+                                          180)
+                                      .toDouble(),
                               child: Container(
                                 width: 200,
                                 height: 280,
@@ -266,12 +267,11 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     BoxShadow(
                                       color: Colors.grey.withOpacity(0.3),
                                       blurRadius: 8,
-                                    )
+                                    ),
                                   ],
                                 ),
                                 child: Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
                                       UniconsLine.file,
@@ -302,7 +302,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     BoxShadow(
                                       color: Colors.blue.withOpacity(0.5),
                                       blurRadius: 8,
-                                    )
+                                    ),
                                   ],
                                 ),
                                 child: IconButton(
@@ -314,8 +314,8 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     setState(() {
                                       _documentRotations[documentIndex] =
                                           (_documentRotations[documentIndex] ??
-                                                  0) +
-                                              90;
+                                              0) +
+                                          90;
                                     });
                                   },
                                   constraints: const BoxConstraints(
@@ -376,6 +376,12 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
             child: DropDownWidget(
               label: 'ກຸ່ມສິນຄ້າ',
               items: ['ໃບຂໍຊື້', 'ໃບະສະເໜີລາຄາ', 'ໃບສັ່ງຊື້'],
+            ),
+          ),
+          Expanded(
+            child: DropDownWidget(
+              label: 'ສະຖານະ',
+              items: ['ອະນຸມັດແລ້ວ', 'ລໍຖ້າອະນຸມັດ', 'ເອກະສານຕີກັບ'],
             ),
           ),
           Container(width: 300, height: 40),
