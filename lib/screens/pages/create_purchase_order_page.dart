@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
-import 'package:purchaser_edge/screens/review_screen.dart';
+
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';

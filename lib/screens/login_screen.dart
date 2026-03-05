@@ -93,6 +93,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               context: context,
                               builder: (_) => _buildSetupConnection(),
                             );
+                          } else {
+                            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
                           }
                         },
                         child: Container(
