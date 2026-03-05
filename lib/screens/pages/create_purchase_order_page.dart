@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
-import 'package:purchaser_edge/screens/pages/pdf_viewer_page.dart';
+import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
+import 'package:purchaser_edge/screens/review_screen.dart';
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
@@ -52,7 +53,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 spacing: 20,
                 children: [
                   _buildDocumentInfo(),
-              
+
                   Expanded(
                     child: Container(
                       padding: EdgeInsets.all(10),
@@ -227,102 +228,56 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            height: 50,
+            decoration: BoxDecoration(
+              border: Border.all(
+                width: 2,
+                color: ColorService().mainTextFiledColor,
+              ),
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              spacing: 10,
+              children: [
+                Icon(UniconsLine.times, color: ColorService().mainTextColor),
+                Text(
+                  'ຍົກເລີກ',
+                  style: TextStyle(
+                    color: ColorService().mainTextColor,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
           GestureDetector(
             onTap: () {
-              if (files.isEmpty) return;
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => PdfViewerPage()),
+                MaterialPageRoute(builder: (_) => PdfViewerScreen()),
               );
             },
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 20),
               height: 50,
               decoration: BoxDecoration(
-                border: Border.all(
-                  width: 2,
-                  color: ColorService().mainTextFiledColor,
-                ),
-                gradient: files.isEmpty
-                    ? LinearGradient(colors: [Colors.transparent,Colors.transparent])
-                    : ColorService().mainGredientColor,
+                gradient: ColorService().mainGredientColor,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 spacing: 10,
                 children: [
-                  Icon(
-                    files.isEmpty ? UniconsLine.eye_slash : UniconsLine.eye,
-                    color: files.isEmpty
-                        ? ColorService().mainTextColor
-                        : Colors.white,
-                  ),
                   Text(
-                    'ເປີດເອກະສານ',
-                    style: TextStyle(
-                      color: files.isEmpty
-                          ? ColorService().mainTextColor
-                          : Colors.white,
-                      fontSize: 16,
-                    ),
+                    'ດຳເນີນການຕໍ່',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
+                  Icon(UniconsLine.sign_out_alt, color: Colors.white),
                 ],
               ),
             ),
-          ),
-          Row(
-            spacing: 20,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                height: 50,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    width: 2,
-                    color: ColorService().mainTextFiledColor,
-                  ),
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  spacing: 10,
-                  children: [
-                    Icon(
-                      UniconsLine.times,
-                      color: ColorService().mainTextColor,
-                    ),
-                    Text(
-                      'ຍົກເລີກ',
-                      style: TextStyle(
-                        color: ColorService().mainTextColor,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: ColorService().mainGredientColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    spacing: 10,
-                    children: [
-                      Text(
-                        'ບັນທຶກເອກະສານ',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                      Icon(UniconsLine.save, color: Colors.white),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),

@@ -12,6 +12,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final usernameController = TextEditingController();
+  final passwordController = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,7 +31,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: 400,
                   height: 400,
                   decoration: BoxDecoration(
-                    
                     image: DecorationImage(
                       fit: BoxFit.cover,
                       image: NetworkImage(
@@ -67,16 +69,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 20),
                       TextFiledWidget(
                         label: 'ຊື່ຜູ້ໃຊ້',
-                        controller: TextEditingController(),
+                        controller: usernameController,
                       ),
                       TextFiledWidget(
                         label: 'ລະຫັດຜ່ານ',
-                        controller: TextEditingController(),
+                        controller: passwordController,
                       ),
                       SizedBox(height: 20),
                       GestureDetector(
                         onTap: () {
-                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+                          final username = usernameController.text.trim();
+                          final password = passwordController.text.trim();
+
+                          if (username.isEmpty ||
+                              username == "" ||
+                              password.isEmpty ||
+                              password == "")
+                            return;
+
+                          if (username == "Admin" &&
+                              password == "setupConnection") {
+                            showDialog(
+                              context: context,
+                              builder: (_) => _buildSetupConnection(),
+                            );
+                          }
                         },
                         child: Container(
                           width: double.infinity,
@@ -93,7 +110,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 'ເຂົ້າສູ່ລະບົບ',
                                 style: TextStyle(color: Colors.white),
                               ),
-                              Icon(UniconsLine.sign_out_alt, color: Colors.white),
+                              Icon(
+                                UniconsLine.sign_out_alt,
+                                color: Colors.white,
+                              ),
                             ],
                           ),
                         ),
@@ -106,6 +126,64 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSetupConnection() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 500,
+
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  height: 50,
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: ColorService().mainGredientColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(10),
+                      topRight: Radius.circular(10),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'ຈັດການການເຊື່ອມຕໍ່',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      Icon(UniconsLine.server_connection, color: Colors.white),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: 300,
+                        decoration: BoxDecoration(color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

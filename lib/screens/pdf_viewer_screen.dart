@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/screens/review_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -17,12 +18,12 @@ import 'package:unicons/unicons.dart';
 // ────────────────────────────────────────────────────────��────────────────────
 final Map<String, Uint8List> _thumbnailImageCache = {};
 
-class PdfViewerPage extends StatefulWidget {
+class PdfViewerScreen extends StatefulWidget {
   @override
-  _PdfViewerPageState createState() => _PdfViewerPageState();
+  _PdfViewerScreenState createState() => _PdfViewerScreenState();
 }
 
-class _PdfViewerPageState extends State<PdfViewerPage> {
+class _PdfViewerScreenState extends State<PdfViewerScreen> {
   List<PdfFileInfo> pdfFiles = [];
   List<PageInfo> allPages = [];
   String? mergedFilePath;
@@ -207,10 +208,19 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                         ),
                       ),
                     // Reload Documents Button
-                    
+
                     // Merge Documents Button
                     GestureDetector(
-                      onTap: pdfFiles.isEmpty ? null : mergeFilesWithUI,
+                      onTap: pdfFiles.isEmpty
+                          ? () {}
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ReviewScreen(),
+                                ),
+                              );
+                            },
                       child: Container(
                         padding: EdgeInsets.symmetric(horizontal: 20),
                         height: 40,
@@ -224,10 +234,10 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                           spacing: 10,
                           children: [
                             Text(
-                              'ບິນທຶກເອກະສານ',
+                              'ດຳເນີນການຕໍ່',
                               style: TextStyle(color: Colors.white),
                             ),
-                            Icon(Icons.save, color: Colors.white),
+                            Icon(UniconsLine.sign_out_alt, color: Colors.white),
                           ],
                         ),
                       ),
@@ -316,7 +326,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                       _thumbnailKeys[i] = GlobalKey();
                                     }
                                     Map<int, List<SignatureInfo>>
-                                        newSignatures = {};
+                                    newSignatures = {};
                                     pageSignatures.forEach((key, signatures) {
                                       int newKey = key;
                                       if (key == oldIndex) {
@@ -445,16 +455,14 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                                 horizontal: 6,
                                                                 vertical: 2,
                                                               ),
-                                                          decoration:
-                                                              BoxDecoration(
+                                                          decoration: BoxDecoration(
                                                             color: Colors
                                                                 .blue
                                                                 .shade50,
                                                             borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              10,
-                                                            ),
+                                                                BorderRadius.circular(
+                                                                  10,
+                                                                ),
                                                           ),
                                                           child: Row(
                                                             children: [
@@ -469,8 +477,7 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                               ),
                                                               Text(
                                                                 '${pageSignatures[index]!.length}',
-                                                                style:
-                                                                    TextStyle(
+                                                                style: TextStyle(
                                                                   color: Colors
                                                                       .blue,
                                                                   fontSize: 11,
@@ -500,14 +507,14 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                         padding: EdgeInsets.all(
                                                           4,
                                                         ),
-                                                        decoration:
-                                                            BoxDecoration(
+                                                        decoration: BoxDecoration(
                                                           color: Colors
                                                               .blue
                                                               .shade50,
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(4),
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
                                                         ),
                                                         child: Icon(
                                                           Icons.rotate_right,
@@ -548,31 +555,30 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                           >
                                                           updatedSignatures =
                                                               {};
-                                                          pageSignatures
-                                                              .forEach(
-                                                            (key, value) {
-                                                              updatedSignatures[key >
-                                                                          index
-                                                                      ? key - 1
-                                                                      : key] =
-                                                                  value;
-                                                            },
-                                                          );
+                                                          pageSignatures.forEach((
+                                                            key,
+                                                            value,
+                                                          ) {
+                                                            updatedSignatures[key >
+                                                                        index
+                                                                    ? key - 1
+                                                                    : key] =
+                                                                value;
+                                                          });
                                                           pageSignatures =
                                                               updatedSignatures;
                                                           Map<int, int>
-                                                              updatedRotations =
-                                                              {};
-                                                          pageRotations
-                                                              .forEach(
-                                                            (key, value) {
-                                                              updatedRotations[key >
-                                                                          index
-                                                                      ? key - 1
-                                                                      : key] =
-                                                                  value;
-                                                            },
-                                                          );
+                                                          updatedRotations = {};
+                                                          pageRotations.forEach((
+                                                            key,
+                                                            value,
+                                                          ) {
+                                                            updatedRotations[key >
+                                                                        index
+                                                                    ? key - 1
+                                                                    : key] =
+                                                                value;
+                                                          });
                                                           pageRotations =
                                                               updatedRotations;
                                                           _pageKeys.remove(
@@ -592,14 +598,14 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                         padding: EdgeInsets.all(
                                                           4,
                                                         ),
-                                                        decoration:
-                                                            BoxDecoration(
+                                                        decoration: BoxDecoration(
                                                           color: Colors
                                                               .red
                                                               .shade50,
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(4),
+                                                              BorderRadius.circular(
+                                                                4,
+                                                              ),
                                                         ),
                                                         child: Icon(
                                                           Icons.delete_outline,
@@ -636,8 +642,8 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                                   : Colors.white,
                                               borderRadius:
                                                   BorderRadius.vertical(
-                                                bottom: Radius.circular(7),
-                                              ),
+                                                    bottom: Radius.circular(7),
+                                                  ),
                                             ),
                                             child: Text(
                                               'ຫນ້າ ${index + 1}',
@@ -692,28 +698,27 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                 child: Center(
                                   child: selectedPageIndex != null
                                       ? SinglePagePreview(
-                                          pageInfo: getAllPages()[
-                                              selectedPageIndex!],
+                                          pageInfo:
+                                              getAllPages()[selectedPageIndex!],
                                           pageIndex: selectedPageIndex!,
-                                          rotation: pageRotations[
-                                                  selectedPageIndex!] ??
+                                          rotation:
+                                              pageRotations[selectedPageIndex!] ??
                                               0,
-                                          signatures: pageSignatures[
-                                                  selectedPageIndex!] ??
+                                          signatures:
+                                              pageSignatures[selectedPageIndex!] ??
                                               [],
                                           onSignatureUpdate:
                                               (index, updatedSignature) {
-                                            setState(() {
-                                              pageSignatures[selectedPageIndex!]![
-                                                  index] = updatedSignature;
-                                            });
-                                          },
+                                                setState(() {
+                                                  pageSignatures[selectedPageIndex!]![index] =
+                                                      updatedSignature;
+                                                });
+                                              },
                                           onSignatureDelete: (index) {
                                             setState(() {
                                               pageSignatures[selectedPageIndex!]!
                                                   .removeAt(index);
-                                              if (pageSignatures[
-                                                      selectedPageIndex!]!
+                                              if (pageSignatures[selectedPageIndex!]!
                                                   .isEmpty) {
                                                 pageSignatures.remove(
                                                   selectedPageIndex!,
@@ -744,47 +749,8 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
                                 ),
                               ),
                       ),
+
                       // Status Footer
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          border: Border(
-                            top: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        child: mergedFilePath != null
-                            ? Container(
-                                padding: EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.green.shade200,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle,
-                                      color: Colors.green,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'ລວມເອກະສານສໍາເລັດ: $mergedFilePath',
-                                        style: TextStyle(
-                                          color: Colors.green.shade900,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : SizedBox.shrink(),
-                      ),
                     ],
                   ),
                 ),
@@ -1456,7 +1422,9 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
       interactionMode: PdfInteractionMode.pan,
       scrollDirection: PdfScrollDirection.vertical,
       onPageChanged: (PdfPageChangedDetails details) {
-        if (!_isDisposed && details.newPageNumber != widget.pageNumber && mounted) {
+        if (!_isDisposed &&
+            details.newPageNumber != widget.pageNumber &&
+            mounted) {
           Future.microtask(() {
             if (!_isDisposed && _controller != null && mounted) {
               _controller!.jumpToPage(widget.pageNumber);
