@@ -52,7 +52,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 spacing: 20,
                 children: [
                   _buildDocumentInfo(),
-
+              
                   Expanded(
                     child: Container(
                       padding: EdgeInsets.all(10),
@@ -121,6 +121,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                     itemBuilder: (context, index) {
                                       final file = files[index];
                                       return Container(
+                                        margin: EdgeInsets.only(top: 10),
                                         width: double.infinity,
                                         height: 40,
                                         child: Row(
@@ -231,7 +232,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
               if (files.isEmpty) return;
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => PDFViewerHome()),
+                MaterialPageRoute(builder: (_) => PdfViewerPage()),
               );
             },
             child: Container(
@@ -242,9 +243,9 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                   width: 2,
                   color: ColorService().mainTextFiledColor,
                 ),
-                color: files.isEmpty
-                    ? Colors.transparent
-                    : ColorService().primaryColor,
+                gradient: files.isEmpty
+                    ? LinearGradient(colors: [Colors.transparent,Colors.transparent])
+                    : ColorService().mainGredientColor,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -306,7 +307,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                   padding: EdgeInsets.symmetric(horizontal: 20),
                   height: 50,
                   decoration: BoxDecoration(
-                    color: ColorService().primaryColor,
+                    gradient: ColorService().mainGredientColor,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(

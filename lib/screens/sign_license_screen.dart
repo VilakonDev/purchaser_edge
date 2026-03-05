@@ -7,6 +7,8 @@ import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:unicons/unicons.dart';
 
+
+
 class SignLicenseScreen extends StatefulWidget {
   const SignLicenseScreen({super.key});
 

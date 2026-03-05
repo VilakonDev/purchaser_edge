@@ -17,18 +17,18 @@ class DashBoardPage extends StatefulWidget {
 
 class _DashBoardPageState extends State<DashBoardPage> {
   List<MonthlyBuyModel> _buyList = [
-    MonthlyBuyModel('ມ.ກ', 12000),
-    MonthlyBuyModel('ກ.ພ', 18500),
-    MonthlyBuyModel('ມີ.ນ', 15200),
-    MonthlyBuyModel('ເມ.ສ', 22000),
-    MonthlyBuyModel('ພ.ພ', 19800),
-    MonthlyBuyModel('ມິ.ຖ', 25000),
-    MonthlyBuyModel('ກ.ລ', 21000),
-    MonthlyBuyModel('ສ.ຫ', 28500),
-    MonthlyBuyModel('ກ.ຍ', 23000),
-    MonthlyBuyModel('ຕ.ລ', 17500),
-    MonthlyBuyModel('ພ.ຈ', 30000),
-    MonthlyBuyModel('ທ.ວ', 35000),
+    MonthlyBuyModel('ມ.ກ', 50),
+    MonthlyBuyModel('ກ.ພ', 78),
+    MonthlyBuyModel('ມີ.ນ', 12),
+    MonthlyBuyModel('ເມ.ສ', 33),
+    MonthlyBuyModel('ພ.ພ', 65),
+    MonthlyBuyModel('ມິ.ຖ', 44),
+    MonthlyBuyModel('ກ.ລ', 21),
+    MonthlyBuyModel('ສ.ຫ', 19),
+    MonthlyBuyModel('ກ.ຍ', 80),
+    MonthlyBuyModel('ຕ.ລ', 90),
+    MonthlyBuyModel('ພ.ຈ', 100),
+    MonthlyBuyModel('ທ.ວ', 78),
   ];
 
   final ScrollController _verticalController = ScrollController();
@@ -243,7 +243,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'ຍອດການຊື້ລາຍເດືອນ',
+              'ລາຍການເອກະສານສັ່ງຊື້ລາຍເດືອນ',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
