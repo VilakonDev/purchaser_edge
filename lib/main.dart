@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
+
 import 'package:purchaser_edge/providers/auth_provider.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/login_screen.dart';
 
@@ -23,6 +25,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => FileProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => DocumentProvider()),
       ],
       child: MaterialApp(
         title: 'Purchaser Edge',

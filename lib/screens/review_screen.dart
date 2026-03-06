@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
+import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
+import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
@@ -138,20 +141,7 @@ class ReviewScreen extends StatelessWidget {
   // ─────────────────────────────────────────────────────────────────────────
   // แสดง Dialog กรอกข้อมูล แล้วส่ง API
   // ─────────────────────────────────────────────────────────────────────────
-  void _showUploadDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _UploadDialog(
-        onConfirm: (formData) => _uploadDocument(context, formData),
-      ),
-    );
-  }
-
-  Future<void> _uploadDocument(
-    BuildContext context,
-    Map<String, String> formData,
-  ) async {
+  Future<void> _uploadDocument(BuildContext context) async {
     // แสดง loading
     showDialog(
       context: context,
@@ -160,8 +150,9 @@ class ReviewScreen extends StatelessWidget {
         canPop: false,
         child: Dialog(
           backgroundColor: Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: EdgeInsets.all(32),
             child: Column(
@@ -187,20 +178,25 @@ class ReviewScreen extends StatelessWidget {
       // บันทึกไฟล์ temp
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
-          '${tempDir.path}/upload_${DateTime.now().millisecondsSinceEpoch}.pdf');
+        '${tempDir.path}/upload_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
       await tempFile.writeAsBytes(pdfBytes);
 
       // สร้าง multipart request
-      final uri =
-          Uri.parse('http://localhost:5000/documents/upload');
+      final uri = Uri.parse('http://localhost:5000/documents/upload');
       final request = http.MultipartRequest('POST', uri);
 
       // Form fields
-      request.fields['document_title'] = formData['document_title'] ?? '';
-      request.fields['branch'] = formData['branch'] ?? '';
-      request.fields['category'] = formData['category'] ?? '';
-      request.fields['status'] = formData['status'] ?? 'pending';
-      request.fields['created_by'] = formData['created_by'] ?? '';
+      request.fields['document_number'] =
+          context.read<DocumentProvider>().documentNumber ?? '';
+      request.fields['document_title'] =
+          context.read<DocumentProvider>().documentTitle ?? '';
+      request.fields['branch'] = context.read<DocumentProvider>().branch ?? '';
+      request.fields['category'] =
+          context.read<DocumentProvider>().documentCategory ?? '';
+      request.fields['status'] = 'pending';
+      request.fields['created_by'] =
+          context.read<DocumentProvider>().createBy ?? '';
 
       // PDF file
       request.files.add(
@@ -208,7 +204,7 @@ class ReviewScreen extends StatelessWidget {
           'file',
           tempFile.path,
           filename:
-              '${formData['document_title']?.replaceAll(' ', '_') ?? 'document'}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+              '${context.read<DocumentProvider>().documentTitle?.replaceAll(' ', '_') ?? 'document'}_${DateTime.now().millisecondsSinceEpoch}.pdf',
         ),
       );
 
@@ -224,12 +220,16 @@ class ReviewScreen extends StatelessWidget {
       if (response.statusCode == 200) {
         // สำเร็จ
         if (context.mounted) {
+          context.read<FileProvider>().clearFile();
+          context.read<DocumentProvider>().resetDocumentInfo();
+
           showDialog(
             context: context,
             builder: (_) => Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Column(
@@ -242,14 +242,19 @@ class ReviewScreen extends StatelessWidget {
                         color: Colors.green.shade50,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.check_rounded,
-                          color: Colors.green, size: 36),
+                      child: Icon(
+                        Icons.check_rounded,
+                        color: Colors.green,
+                        size: 36,
+                      ),
                     ),
                     SizedBox(height: 16),
                     Text(
                       'ສົ່ງເອກະສານສຳເລັດ!',
                       style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     SizedBox(height: 24),
                     SizedBox(
@@ -258,7 +263,8 @@ class ReviewScreen extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           padding: EdgeInsets.symmetric(vertical: 14),
                         ),
                         onPressed: () {
@@ -269,9 +275,10 @@ class ReviewScreen extends StatelessWidget {
                             ..pop()
                             ..pop();
                         },
-                        child: Text('ກັບສູ່ໜ້າຫຼັກ',
-                            style: TextStyle(
-                                color: Colors.white, fontSize: 15)),
+                        child: Text(
+                          'ກັບສູ່ໜ້າຫຼັກ',
+                          style: TextStyle(color: Colors.white, fontSize: 15),
+                        ),
                       ),
                     ),
                   ],
@@ -283,8 +290,10 @@ class ReviewScreen extends StatelessWidget {
       } else {
         // Error จาก server
         if (context.mounted) {
-          _showErrorDialog(context,
-              'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}');
+          _showErrorDialog(
+            context,
+            'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}',
+          );
         }
       }
     } catch (e) {
@@ -301,8 +310,7 @@ class ReviewScreen extends StatelessWidget {
       context: context,
       builder: (_) => Dialog(
         backgroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Column(
@@ -315,14 +323,12 @@ class ReviewScreen extends StatelessWidget {
                   color: Colors.red.shade50,
                   shape: BoxShape.circle,
                 ),
-                child:
-                    Icon(Icons.error_outline, color: Colors.red, size: 36),
+                child: Icon(Icons.error_outline, color: Colors.red, size: 36),
               ),
               SizedBox(height: 16),
               Text(
                 'ເກີດຂໍ້ຜິດພາດ',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 8),
               Text(
@@ -337,14 +343,16 @@ class ReviewScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: EdgeInsets.symmetric(vertical: 14),
                   ),
                   onPressed: () =>
                       Navigator.of(context, rootNavigator: true).pop(),
-                  child: Text('ປິດ',
-                      style:
-                          TextStyle(color: Colors.white, fontSize: 15)),
+                  child: Text(
+                    'ປິດ',
+                    style: TextStyle(color: Colors.white, fontSize: 15),
+                  ),
                 ),
               ),
             ],
@@ -389,8 +397,7 @@ class ReviewScreen extends StatelessWidget {
                         Icon(UniconsLine.arrow_left),
                         Text(
                           'ກັບຄືນ',
-                          style: TextStyle(
-                              color: ColorService().mainTextColor),
+                          style: TextStyle(color: ColorService().mainTextColor),
                         ),
                       ],
                     ),
@@ -406,7 +413,7 @@ class ReviewScreen extends StatelessWidget {
                 ),
                 // ===== ปุ่มส่งเอกสาร =====
                 GestureDetector(
-                  onTap: () => _showUploadDialog(context),
+                  onTap: () => _uploadDocument(context),
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 20),
                     height: 40,
@@ -437,12 +444,16 @@ class ReviewScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.picture_as_pdf_outlined,
-                            size: 80, color: Colors.grey.shade300),
+                        Icon(
+                          Icons.picture_as_pdf_outlined,
+                          size: 80,
+                          color: Colors.grey.shade300,
+                        ),
                         SizedBox(height: 16),
-                        Text('ບໍ່ມີເອກະສານສຳລັບກວດສອບ',
-                            style:
-                                TextStyle(color: Colors.grey, fontSize: 16)),
+                        Text(
+                          'ບໍ່ມີເອກະສານສຳລັບກວດສອບ',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
                       ],
                     ),
                   )
@@ -450,7 +461,9 @@ class ReviewScreen extends StatelessWidget {
                     color: Colors.grey.shade200,
                     child: ListView.builder(
                       padding: EdgeInsets.symmetric(
-                          vertical: 16, horizontal: 200),
+                        vertical: 16,
+                        horizontal: 200,
+                      ),
                       itemCount: pages.length,
                       itemBuilder: (context, index) {
                         final pageInfo = pages[index];
@@ -476,211 +489,6 @@ class ReviewScreen extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // _UploadDialog — form กรอกข้อมูลก่อนส่ง
 // ─────────────────────────────────────────────────────────────────────────────
-class _UploadDialog extends StatefulWidget {
-  final Future<void> Function(Map<String, String>) onConfirm;
-
-  const _UploadDialog({required this.onConfirm});
-
-  @override
-  State<_UploadDialog> createState() => _UploadDialogState();
-}
-
-class _UploadDialogState extends State<_UploadDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _branchController = TextEditingController();
-  final _categoryController = TextEditingController();
-  final _createdByController = TextEditingController();
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _branchController.dispose();
-    _categoryController.dispose();
-    _createdByController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
-    Navigator.of(context, rootNavigator: true).pop(); // ปิด dialog
-    widget.onConfirm({
-      'document_title': _titleController.text.trim(),
-      'branch': _branchController.text.trim(),
-      'category': _categoryController.text.trim(),
-      'status': 'pending',
-      'created_by': _createdByController.text.trim(),
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.white,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 480,
-        padding: EdgeInsets.all(32),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.send_rounded,
-                        color: Colors.green.shade600, size: 20),
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    'ຂໍ້ມູນເອກະສານ',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // ชื่อเอกสาร
-              _buildField(
-                controller: _titleController,
-                label: 'ຊື່ເອກະສານ',
-                hint: 'ກະລຸນາໃສ່ຊື່ເອກະສານ',
-                icon: Icons.description_outlined,
-              ),
-              SizedBox(height: 16),
-
-              // สาขา
-              _buildField(
-                controller: _branchController,
-                label: 'ສາຂາ',
-                hint: 'ກະລຸນາໃສ່ຊື່ສາຂາ',
-                icon: Icons.business_outlined,
-              ),
-              SizedBox(height: 16),
-
-              // หมวดหมู่
-              _buildField(
-                controller: _categoryController,
-                label: 'ປະເພດເອກະສານ',
-                hint: 'ກະລຸນາໃສ່ປະເພດ',
-                icon: Icons.category_outlined,
-              ),
-              SizedBox(height: 16),
-
-              // ผู้สร้าง
-              _buildField(
-                controller: _createdByController,
-                label: 'ຜູ້ສ້າງ',
-                hint: 'ຊື່ຜູ້ສ້າງເອກະສານ',
-                icon: Icons.person_outline,
-              ),
-              SizedBox(height: 28),
-
-              // Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        side: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      onPressed: () =>
-                          Navigator.of(context, rootNavigator: true).pop(),
-                      child: Text('ຍົກເລີກ',
-                          style:
-                              TextStyle(color: Colors.grey.shade700)),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: _submit,
-                      child: Text('ສົ່ງເອກະສານ',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700)),
-        SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle:
-                TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            prefixIcon:
-                Icon(icon, color: Colors.grey.shade400, size: 20),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            contentPadding:
-                EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.green, width: 1.5),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.red.shade300),
-            ),
-          ),
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'ກະລຸນາໃສ່ $label' : null,
-        ),
-      ],
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // _ReviewPageItem — one card per page
@@ -736,9 +544,10 @@ class _ReviewPageItem extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 8,
-                          offset: Offset(0, 3))
+                        color: Colors.black12,
+                        blurRadius: 8,
+                        offset: Offset(0, 3),
+                      ),
                     ],
                   ),
                   child: Center(child: CircularProgressIndicator()),
@@ -758,9 +567,10 @@ class _ReviewPageItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10,
-                        offset: Offset(0, 4))
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
@@ -777,8 +587,7 @@ class _ReviewPageItem extends StatelessWidget {
                           ),
                         ),
                         ...signatures.map(
-                          (sig) =>
-                              _ReadOnlySignatureOverlay(signature: sig),
+                          (sig) => _ReadOnlySignatureOverlay(signature: sig),
                         ),
                       ],
                     ),
@@ -857,8 +666,7 @@ class _ReviewPdfPageImageState extends State<_ReviewPdfPageImage> {
         return;
       }
 
-      final buffer =
-          await ui.ImmutableBuffer.fromUint8List(pageImage.pixels);
+      final buffer = await ui.ImmutableBuffer.fromUint8List(pageImage.pixels);
       final descriptor = await ui.ImageDescriptor.raw(
         buffer,
         width: pageImage.width,
@@ -867,8 +675,9 @@ class _ReviewPdfPageImageState extends State<_ReviewPdfPageImage> {
       );
       final codec = await descriptor.instantiateCodec();
       final frameInfo = await codec.getNextFrame();
-      final byteData =
-          await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await frameInfo.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       frameInfo.image.dispose();
 
       if (byteData == null) {
@@ -923,15 +732,21 @@ class _ReviewPdfPageImageState extends State<_ReviewPdfPageImage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Container(
-          color: Colors.white,
-          child: Center(child: CircularProgressIndicator()));
+        color: Colors.white,
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     if (_bytes == null) {
       return Container(
-          color: Colors.white,
-          child: Center(
-              child: Icon(Icons.broken_image_outlined,
-                  color: Colors.grey, size: 48)));
+        color: Colors.white,
+        child: Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: Colors.grey,
+            size: 48,
+          ),
+        ),
+      );
     }
     return Image.memory(
       _bytes!,

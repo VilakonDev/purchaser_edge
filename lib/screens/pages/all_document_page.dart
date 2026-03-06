@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
+import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
@@ -134,68 +137,87 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                     ),
                                   ),
                                 ],
-                                rows: List.generate(100, (index) {
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(Text('PO-2026-00$index')),
-                                      const DataCell(Text('ໃບສັ່ງຊື້ສິນຄ້າ')),
-                                      const DataCell(Text('ວັດສະດຸໂຄງສ້າງ')),
-                                      const DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
-                                      DataCell(
-                                        Text(
-                                          DateFormat(
-                                            'EEE, M/d/y',
-                                          ).format(DateTime.now()),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Container(
-                                          width: 120,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: Colors.green,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
+                                rows: List.generate(
+                                  context
+                                      .watch<DocumentProvider>()
+                                      .documents
+                                      .length,
+                                  (index) {
+                                    final cellData = context
+                                        .watch<DocumentProvider>()
+                                        .documents[index];
+
+                                    return DataRow(
+                                      cells: [
+                                        DataCell(Text('PO-2026-00$index')),
+                                        DataCell(Text(cellData.documentTitle)),
+                                        DataCell(Text('ວັດສະດຸໂຄງສ້າງ')),
+                                        DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
+                                        DataCell(
+                                          Text(
+                                            DateFormat(
+                                              'EEE, M/d/y',
+                                            ).format(DateTime.now()),
                                           ),
-                                          child: const Center(
-                                            child: Text(
-                                              'ອະນຸມັດແລ້ວ',
-                                              style: TextStyle(
-                                                color: Colors.white,
+                                        ),
+                                        DataCell(
+                                          Container(
+                                            width: 120,
+                                            height: 36,
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  cellData.status == "PENDING"
+                                                  ? ColorService().warningColor
+                                                  : cellData.status ==
+                                                        "DIRECTOR_APPROVED"
+                                                  ? ColorService().successColor
+                                                  : ColorService().errorColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                cellData.status == "PENDING"
+                                                    ? 'ລໍຖ້າອະນຸມັດ'
+                                                    : 'ອະນຸມັດແລ້ວ',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      DataCell(
-                                        Row(
-                                          spacing: 10,
-                                          children: [
-                                            _buildActionButton(
-                                              icon: UniconsLine.eye,
-                                              color: Colors.blue,
-                                              onPressed: () {
-                                                _showDocumentPreview(
-                                                  context,
-                                                  index,
-                                                );
-                                              },
-                                            ),
-                                            _buildActionButton(
-                                              icon: UniconsLine.edit,
-                                              color: Colors.orange,
-                                            ),
-                                            _buildActionButton(
-                                              icon: UniconsLine.trash,
-                                              color: Colors.red,
-                                            ),
-                                          ],
+                                        DataCell(
+                                          Row(
+                                            spacing: 10,
+                                            children: [
+                                              _buildActionButton(
+                                                icon: UniconsLine.eye,
+                                                color: Colors.blue,
+                                                onPressed: () {
+                                                  context
+                                                      .read<FileProvider>()
+                                                      .openFile(
+                                                        "http://192.168.1.124:5000/uploads/${cellData.filePending}",
+                                                      );
+                                                },
+                                              ),
+
+                                              _buildActionButton(
+                                                icon: UniconsLine.edit,
+                                                color: Colors.orange,
+                                              ),
+                                              _buildActionButton(
+                                                icon: UniconsLine.trash,
+                                                color: Colors.red,
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  );
-                                }),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           ),

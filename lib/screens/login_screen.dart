@@ -94,7 +94,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               builder: (_) => _buildSetupConnection(),
                             );
                           } else {
-                            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (_) => HomeScreen()),
+                            );
                           }
                         },
                         child: Container(
@@ -172,11 +175,141 @@ class _LoginScreenState extends State<LoginScreen> {
                 Padding(
                   padding: EdgeInsets.all(20),
                   child: Column(
+                    spacing: 10,
                     children: [
+                      Row(
+                        spacing: 10,
+                        children: [
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'ຊື່',
+                              controller: TextEditingController(),
+                            ),
+                          ),
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'IP Address',
+                              controller: TextEditingController(),
+                            ),
+                          ),
+                          Column(
+                            children: [
+                              SizedBox(height: 40),
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  gradient: ColorService().mainGredientColor,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    UniconsLine.plus,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                       Container(
                         width: double.infinity,
                         height: 300,
-                        decoration: BoxDecoration(color: Colors.red),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: ListView.builder(
+                          itemCount: 10,
+                          itemBuilder: (context, index) {
+                            return Container(
+                              width: double.infinity,
+                              margin: EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    width: 1,
+                                    color: ColorService().mainTextFiledColor,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('TCR HOME STORE VTE 02'),
+                                      Text('192.168.1.142'),
+                                    ],
+                                  ),
+                                  Icon(
+                                    UniconsLine.trash,
+                                    color: ColorService().errorColor,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      Row(
+                        spacing: 10,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (mounted) {
+                                Navigator.pop(context);
+                              }
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 20),
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                spacing: 10,
+                                children: [
+                                  Text(
+                                    'ຍົກເລີກ',
+                                    style: TextStyle(
+                                      color: ColorService().mainTextColor,
+                                    ),
+                                  ),
+                                  Icon(
+                                    UniconsLine.times,
+                                    color: ColorService().mainTextColor,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 20),
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: ColorService().mainGredientColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              spacing: 10,
+                              children: [
+                                Text(
+                                  'ບັນທິກ',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                Icon(UniconsLine.save, color: Colors.white),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

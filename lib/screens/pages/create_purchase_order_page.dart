@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
 
@@ -23,6 +24,10 @@ class CreatePurchaseOrderPage extends StatefulWidget {
 }
 
 class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
+  final documentNumberController = TextEditingController();
+  final documentTitleController = TextEditingController();
+  String? documentCategory;
+
   void pickFiles() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -182,9 +187,23 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
               color: ColorService().mainTextColor,
             ),
           ),
-          TextFiledWidget(
-            label: 'ຊື່ເອກະສານ',
-            controller: TextEditingController(),
+          Row(
+            spacing: 10,
+            children: [
+              Container(
+                width: 200,
+                child: TextFiledWidget(
+                  label: 'ໝາຍເລກ PO',
+                  controller: documentNumberController,
+                ),
+              ),
+              Expanded(
+                child: TextFiledWidget(
+                  label: 'ຊື່ເລື່ອງ',
+                  controller: documentTitleController,
+                ),
+              ),
+            ],
           ),
           Row(
             spacing: 20,
@@ -193,14 +212,14 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 child: DropDownWidget(
                   label: 'ກຸ່ມເອກະສານ',
                   items: ['HT.PT.HO', 'PA.HW.DW.DM'],
+                  onChanged: (value) {
+                    setState(() {
+                      documentCategory = value;
+                    });
+                  },
                 ),
               ),
-              Expanded(
-                child: DropDownWidget(
-                  label: 'ກຸ່ມເອກະສານ',
-                  items: ['HT.PT.HO', 'PA.HW.DW.DM'],
-                ),
-              ),
+              Expanded(child: SizedBox()),
               Expanded(
                 child: Align(
                   alignment: AlignmentGeometry.centerEnd,
@@ -255,6 +274,17 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
           ),
           GestureDetector(
             onTap: () {
+              final documentNumber = documentNumberController.text.trim();
+              final documentTitle = documentTitleController.text.trim();
+
+              context.read<DocumentProvider>().setDocumentInfo(
+                documentNumber,
+                documentTitle,
+                documentCategory.toString(),
+                'TCR_VTE',
+                'VILAKONE',
+              );
+
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => PdfViewerScreen()),

@@ -256,7 +256,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                         ),
                       ),
 
-                    // ===== ปุ่ม ดำเนินการต่อ =====
+                    // ===== ປຸ່ມ ດຳເນີນການຕໍ່ =====
                     GestureDetector(
                       onTap: _navigateToReview,
                       child: Container(
@@ -934,7 +934,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OptimizedPdfThumbnail Widget
+// OptimizedPdfThumbnail Widget  ← แก้ไข race condition + retry ที่นี่
 // ─────────────────────────────────────────────────────────────────────────────
 
 class OptimizedPdfThumbnail extends StatefulWidget {
@@ -956,6 +956,10 @@ class OptimizedPdfThumbnail extends StatefulWidget {
 class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
   Uint8List? _imageBytes;
   bool _isLoading = true;
+  bool _hasError = false;
+
+  /// เพิ่มทุกครั้งที่เริ่ม load ใหม่ ใช้เป็น cancellation token
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -969,9 +973,8 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
     if (oldWidget.filePath != widget.filePath ||
         oldWidget.pageNumber != widget.pageNumber ||
         oldWidget.rotation != widget.rotation) {
-      final oldKey =
-          '${oldWidget.filePath}_${oldWidget.pageNumber}_${oldWidget.rotation}';
-      pdfThumbnailCache.remove(oldKey);
+      // ยกเลิก load รุ่นเก่า แล้วเริ่มใหม่
+      _loadGeneration++;
       _loadThumbnail();
     }
   }
@@ -981,39 +984,84 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
 
   Future<void> _loadThumbnail() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
 
+    // จด generation ที่ตัวเองกำลัง load อยู่
+    final int myGeneration = _loadGeneration;
+
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    // ตรวจ cache ก่อน
     if (pdfThumbnailCache.containsKey(_cacheKey)) {
-      if (mounted) {
-        setState(() {
-          _imageBytes = pdfThumbnailCache[_cacheKey];
-          _isLoading = false;
-        });
-      }
+      if (!mounted || myGeneration != _loadGeneration) return;
+      setState(() {
+        _imageBytes = pdfThumbnailCache[_cacheKey];
+        _isLoading = false;
+      });
       return;
     }
 
+    // ลอง render ไม่เกิน 3 ครั้ง
+    const int maxRetries = 3;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      // ถูก cancel แล้ว → หยุดทันที
+      if (!mounted || myGeneration != _loadGeneration) return;
+
+      try {
+        final Uint8List? result = await _renderThumbnail();
+
+        // ตรวจอีกครั้งหลัง await
+        if (!mounted || myGeneration != _loadGeneration) return;
+
+        if (result != null) {
+          pdfThumbnailCache[_cacheKey] = result;
+          setState(() {
+            _imageBytes = result;
+            _isLoading = false;
+            _hasError = false;
+          });
+          return; // สำเร็จ ออกจาก loop
+        }
+      } catch (e) {
+        debugPrint('Thumbnail attempt ${attempt + 1} error: $e');
+      }
+
+      // รอก่อน retry (ยกเว้น attempt สุดท้าย)
+      if (attempt < maxRetries - 1) {
+        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      }
+    }
+
+    // ถ้าถึงนี่แปลว่า retry หมดแล้วยังไม่ได้
+    if (!mounted || myGeneration != _loadGeneration) return;
+    setState(() {
+      _isLoading = false;
+      _hasError = true;
+    });
+  }
+
+  /// Render หน้า PDF เป็น PNG bytes — return null ถ้าล้มเหลว
+  Future<Uint8List?> _renderThumbnail() async {
+    pdfrx.PdfDocument? document;
     try {
-      final document = await pdfrx.PdfDocument.openFile(widget.filePath);
+      document = await pdfrx.PdfDocument.openFile(widget.filePath);
       final page = document.pages[widget.pageNumber - 1];
 
       const double dpi = 96.0;
       final double scale = dpi / 72.0;
-      final int imgW = (page.width * scale).round();
-      final int imgH = (page.height * scale).round();
+      final int imgW = (page.width * scale).round().clamp(1, 4096);
+      final int imgH = (page.height * scale).round().clamp(1, 4096);
 
       final pdfrx.PdfImage? pageImage = await page.render(
         fullWidth: imgW.toDouble(),
         fullHeight: imgH.toDouble(),
       );
 
-      document.dispose();
+      if (pageImage == null) return null;
 
-      if (pageImage == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
-
+      // แปลง raw pixels → PNG
       final ui.ImmutableBuffer buffer =
           await ui.ImmutableBuffer.fromUint8List(pageImage.pixels);
       final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
@@ -1028,25 +1076,14 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
           await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
       frameInfo.image.dispose();
 
-      if (byteData == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+      if (byteData == null) return null;
 
       final Uint8List pngBytes = byteData.buffer.asUint8List();
-      Uint8List finalBytes = await _rotateImage(pngBytes, widget.rotation);
 
-      pdfThumbnailCache[_cacheKey] = finalBytes;
-
-      if (mounted) {
-        setState(() {
-          _imageBytes = finalBytes;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Thumbnail error: $e');
-      if (mounted) setState(() => _isLoading = false);
+      // หมุนถ้าจำเป็น
+      return await _rotateImage(pngBytes, widget.rotation);
+    } finally {
+      document?.dispose();
     }
   }
 
@@ -1104,14 +1141,48 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
         ),
       );
     }
-    if (_imageBytes == null) {
+
+    // แสดงปุ่ม retry เมื่อ error
+    if (_hasError || _imageBytes == null) {
       return SizedBox(
         height: 160,
         child: Center(
-          child: Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
+              SizedBox(height: 8),
+              GestureDetector(
+                onTap: () {
+                  _loadGeneration++;
+                  _loadThumbnail();
+                },
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, size: 14, color: Colors.blue),
+                      SizedBox(width: 4),
+                      Text(
+                        'ລອງໃໝ່',
+                        style: TextStyle(fontSize: 11, color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(2),
       child: Image.memory(
@@ -1369,9 +1440,6 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
   @override
   void didUpdateWidget(SignatureOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // sync ตำแหน่งใหม่ทุกครั้งที่ signature object เปลี่ยน
-    // เช่น เมื่อ user สลับไปหน้าอื่นแล้วกลับมา Flutter อาจ reuse
-    // widget ตัวเดิม แต่ส่ง signature ของหน้าใหม่เข้ามา
     if (oldWidget.signature.left != widget.signature.left ||
         oldWidget.signature.top != widget.signature.top ||
         oldWidget.signature.width != widget.signature.width ||

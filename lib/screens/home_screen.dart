@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:purchaser_edge/main.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/screens/pages/all_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
@@ -27,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.read<DocumentProvider>().startAutoFetch();
+
     return Scaffold(
       body: Row(
         children: [
@@ -52,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
             spacing: isShowLabel ? 10 : 0,
             children: [
               Icon(icon, color: Colors.white),
-        
+
               isShowLabel
                   ? Text(
                       label,
@@ -97,8 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           GestureDetector(
-            onTap: ()  {
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => MyApp()), (predicate) => false);
+            onTap: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => MyApp()),
+                (predicate) => false,
+              );
             },
             child: Container(
               height: 50,
@@ -106,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 spacing: isShowLabel ? 10 : 0,
                 children: [
                   Icon(UniconsLine.sign_in_alt, color: Colors.white),
-            
+
                   isShowLabel
                       ? Text(
                           'ອອກຈາກລະບົບ',
@@ -122,6 +130,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
-
-
