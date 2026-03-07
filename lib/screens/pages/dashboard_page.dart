@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:pie_chart_sz/ValueSettings.dart';
 import 'package:pie_chart_sz/pie_chart_sz.dart';
+import 'package:provider/provider.dart';
 import 'package:purchaser_edge/model/monthly_buy_model.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -80,7 +82,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
                                   color: ColorService().mainTextColor,
                                 ),
                               ),
-                              _buildRecentDocument()
+                              _buildRecentDocument(),
                             ],
                           ),
                         ),
@@ -149,7 +151,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
           SummaryCard(
             ColorService().primaryColor,
             'ເອກະສານທັງໝົດ',
-            120,
+            context.watch<DocumentProvider>().documents.length,
             UniconsLine.file_alt,
           ),
           SummaryCard(
@@ -205,7 +207,13 @@ class _DashBoardPageState extends State<DashBoardPage> {
                 ColorService().successColor,
                 ColorService().errorColor,
               ],
-              values: [120, 50, 80, 2],
+              values: [
+                context.watch<DocumentProvider>().documents.length.toDouble(),
+
+                1,
+                1,
+                2,
+              ],
               gapSize: 0.15,
               centerText: "",
               centerTextStyle: TextStyle(

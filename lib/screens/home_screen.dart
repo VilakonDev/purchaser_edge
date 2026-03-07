@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/main.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/screens/pages/all_document_page.dart';
@@ -26,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
     DashBoardPage(),
     CreatePurchaseOrderPage(),
     AllDocumentPage(),
-   UserManagementPage(),
+    UserManagementPage(),
   ];
 
   @override
@@ -38,7 +39,32 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Row(
         children: [
           _buildSideBar(),
-          Expanded(child: _pages[currentPageIndex]),
+          Expanded(
+            child: Column(
+              children: [
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  width: double.infinity,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: ColorService().mainBackGroundColor,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        'ຍິນດີຕ້ອນຮັບ ${context.read<AuthProvider>().currentUser?.fullName} - ${context.read<AuthProvider>().currentUser?.role}',
+                        style: TextStyle(
+                          color: ColorService().mainTextColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(child: _pages[currentPageIndex]),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -100,7 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildSideBarMenu(0, UniconsLine.create_dashboard, 'ໜ້າຫຼັກ'),
               _buildSideBarMenu(1, UniconsLine.plus_circle, 'ສ້າງເອກະສານໃຫມ່'),
               _buildSideBarMenu(2, UniconsLine.file_alt, 'ເອກະສານທັງໝົດ'),
-              _buildSideBarMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ'),
+              context.read<AuthProvider>().currentUser?.role == "IT"
+                  ? _buildSideBarMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ')
+                  : Container(),
             ],
           ),
 

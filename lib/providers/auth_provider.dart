@@ -4,9 +4,13 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:purchaser_edge/model/user_model.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthProvider extends ChangeNotifier {
+  CurrentUserModel? currentUser;
+
   String baseURL = "http://localhost:5000";
 
   Future<String?> getDeviceID() async {
@@ -33,7 +37,6 @@ class AuthProvider extends ChangeNotifier {
       },
     );
 
- 
     // สมมติ server คืน {"valid": true} เป็น json
     if (response.statusCode == 200) {
       final state = jsonDecode(response.body);
@@ -59,6 +62,31 @@ class AuthProvider extends ChangeNotifier {
 
       await pref.setString('license_key', licenseKey);
       return true;
+    }
+
+    return false;
+  }
+
+  Future<bool> login(
+    BuildContext context,
+    String username,
+    String password,
+  ) async {
+    final response = await http.post(
+      Uri.parse('http://localhost:5000/auth/login'),
+      body: {"username": username, "password": password},
+    );
+
+    if (response.statusCode == 200) {
+      final loginData = jsonDecode(response.body);
+
+      if (loginData['success']) {
+        currentUser = CurrentUserModel.fromJson(loginData['data'][0]);
+
+        return true;
+      }
+
+      return false;
     }
 
     return false;

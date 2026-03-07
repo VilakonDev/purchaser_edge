@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/screens/home_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
@@ -77,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: 20),
                       GestureDetector(
-                        onTap: () {
+                        onTap: () async {
                           final username = usernameController.text.trim();
                           final password = passwordController.text.trim();
 
@@ -94,10 +96,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               builder: (_) => _buildSetupConnection(),
                             );
                           } else {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => HomeScreen()),
-                            );
+                            bool isLogin = await context
+                                .read<AuthProvider>()
+                                .login(context, username, password);
+
+                            if (isLogin) {
+                              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+                            } else {
+                              print('Username or passwod incorrect');
+                            }
                           }
                         },
                         child: Container(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
@@ -228,14 +229,17 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                 },
                                               ),
 
-                                              _buildActionButton(
-                                                icon: UniconsLine.check,
-                                                color: ColorService().successColor,
-                                              ),
-                                              _buildActionButton(
-                                                icon: UniconsLine.backpack,
-                                                color: Colors.red,
-                                              ),
+                                              context
+                                                          .read<AuthProvider>()
+                                                          .currentUser
+                                                          ?.role ==
+                                                      "DISTRICT_MANAGER"
+                                                  ? _buildActionButton(
+                                                      icon: UniconsLine.check,
+                                                      color: ColorService()
+                                                          .successColor,
+                                                    )
+                                                  : Container(),
                                             ],
                                           ),
                                         ),
@@ -289,7 +293,6 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
       child: Row(
         spacing: 10,
         children: [
-         
           Expanded(
             child: DropDownWidget(
               label: 'ກຸ່ມສິນຄ້າ',
