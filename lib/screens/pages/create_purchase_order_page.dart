@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
@@ -281,8 +282,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 documentNumber,
                 documentTitle,
                 documentCategory.toString(),
-                'TCR_VTE',
-                'VILAKONE',
+                context.read<AuthProvider>().currentUser!.branch,
+                context.read<AuthProvider>().currentUser!.fullName,
               );
 
               Navigator.push(

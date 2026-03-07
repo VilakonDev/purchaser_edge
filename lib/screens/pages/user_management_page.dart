@@ -345,7 +345,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                 role.toString(),
                               );
 
-                              Navigator.pop(context);
+                              if(mounted) {
+                                Navigator.pop(context);
+                              }
                             },
                             child: Container(
                               height: 40,

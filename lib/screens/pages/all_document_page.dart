@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/screens/approve_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
@@ -192,7 +193,9 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                         DataCell(
                                           cellData.status == "PENDING"
                                               ? Text('...........')
-                                              : Container(
+                                              : cellData.status ==
+                                                    "DIRECTOR_APPROVED"
+                                              ? Container(
                                                   width: 120,
                                                   height: 36,
                                                   decoration: BoxDecoration(
@@ -211,7 +214,8 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                       ),
                                                     ),
                                                   ),
-                                                ),
+                                                )
+                                              : Container(),
                                         ),
                                         DataCell(
                                           Row(
@@ -221,11 +225,30 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                 icon: UniconsLine.eye,
                                                 color: Colors.blue,
                                                 onPressed: () {
-                                                  context
-                                                      .read<FileProvider>()
-                                                      .openFile(
-                                                        "http://192.168.1.221:5000/uploads/${cellData.filePending}",
-                                                      );
+                                                  cellData.status == "PENDING"
+                                                      ? context
+                                                            .read<
+                                                              FileProvider
+                                                            >()
+                                                            .openFile(
+                                                              "http://localhost:5000/uploads/${cellData.filePending}",
+                                                            )
+                                                      : cellData.status ==
+                                                            "DM_APPROVED"
+                                                      ? context
+                                                            .read<
+                                                              FileProvider
+                                                            >()
+                                                            .openFile(
+                                                              "http://localhost:5000/uploads/${cellData.fileDm}",
+                                                            )
+                                                      : context
+                                                            .read<
+                                                              FileProvider
+                                                            >()
+                                                            .openFile(
+                                                              "http://localhost:5000/uploads/${cellData.fileDirector}",
+                                                            );
                                                 },
                                               ),
 
@@ -235,6 +258,46 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                           ?.role ==
                                                       "DISTRICT_MANAGER"
                                                   ? _buildActionButton(
+                                                      onPressed: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ApproveScreen(
+                                                              fileName: cellData
+                                                                  .filePending,
+                                                              documentId: cellData
+                                                                  .id
+                                                                  .toString(),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                      icon: UniconsLine.check,
+                                                      color: ColorService()
+                                                          .successColor,
+                                                    )
+                                                  : context
+                                                            .read<
+                                                              AuthProvider
+                                                            >()
+                                                            .currentUser!
+                                                            .role ==
+                                                        "DIRECTOR"
+                                                  ? _buildActionButton(
+                                                      onPressed: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ApproveScreen(
+                                                              fileName: cellData
+                                                                  .fileDm,
+                                                              documentId: cellData
+                                                                  .id
+                                                                  .toString(),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
                                                       icon: UniconsLine.check,
                                                       color: ColorService()
                                                           .successColor,
