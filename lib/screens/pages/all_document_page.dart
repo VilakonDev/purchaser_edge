@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
@@ -18,7 +18,6 @@ class AllDocumentPage extends StatefulWidget {
 class _AllDocumentPageState extends State<AllDocumentPage> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
-  final Map<int, int> _documentRotations = {};
 
   @override
   void dispose() {
@@ -84,7 +83,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                   ),
                                   DataColumn(
                                     label: Text(
-                                      'ປະເພດເອກະສານ',
+                                      'ຊື່ເລື່ອງ',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w300,
@@ -93,7 +92,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                   ),
                                   DataColumn(
                                     label: Text(
-                                      'ຊື່ເລື່ອງ',
+                                      'ກຸ່ມເອກະສານ',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w300,
@@ -120,7 +119,16 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                   ),
                                   DataColumn(
                                     label: Text(
-                                      'ສະຖານະ',
+                                      'ຜູ້ຈັດການເຂດ',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      'ຜູ້ບໍລິຫານ',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w300,
@@ -149,43 +157,60 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
 
                                     return DataRow(
                                       cells: [
-                                        DataCell(Text('PO-2026-00$index')),
+                                        DataCell(Text(cellData.documentNumber)),
                                         DataCell(Text(cellData.documentTitle)),
-                                        DataCell(Text('ວັດສະດຸໂຄງສ້າງ')),
-                                        DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
                                         DataCell(
-                                          Text(
-                                            DateFormat(
-                                              'EEE, M/d/y',
-                                            ).format(DateTime.now()),
-                                          ),
+                                          Text(cellData.documentCategory),
+                                        ),
+                                        DataCell(Text(cellData.createdBy)),
+                                        DataCell(Text(cellData.createdAt)),
+                                        DataCell(
+                                          cellData.status == "PENDING"
+                                              ? Text('...........')
+                                              : Container(
+                                                  width: 120,
+                                                  height: 36,
+                                                  decoration: BoxDecoration(
+                                                    color: ColorService()
+                                                        .successColor,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'ອະນຸມັດແລ້ວ',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                         ),
                                         DataCell(
-                                          Container(
-                                            width: 120,
-                                            height: 36,
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  cellData.status == "PENDING"
-                                                  ? ColorService().warningColor
-                                                  : cellData.status ==
-                                                        "DIRECTOR_APPROVED"
-                                                  ? ColorService().successColor
-                                                  : ColorService().errorColor,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                cellData.status == "PENDING"
-                                                    ? 'ລໍຖ້າອະນຸມັດ'
-                                                    : 'ອະນຸມັດແລ້ວ',
-                                                style: TextStyle(
-                                                  color: Colors.white,
+                                          cellData.status == "PENDING"
+                                              ? Text('...........')
+                                              : Container(
+                                                  width: 120,
+                                                  height: 36,
+                                                  decoration: BoxDecoration(
+                                                    color: ColorService()
+                                                        .successColor,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'ອະນຸມັດແລ້ວ',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                          ),
                                         ),
                                         DataCell(
                                           Row(
@@ -198,17 +223,17 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                   context
                                                       .read<FileProvider>()
                                                       .openFile(
-                                                        "http://192.168.1.124:5000/uploads/${cellData.filePending}",
+                                                        "http://192.168.1.221:5000/uploads/${cellData.filePending}",
                                                       );
                                                 },
                                               ),
 
                                               _buildActionButton(
-                                                icon: UniconsLine.edit,
-                                                color: Colors.orange,
+                                                icon: UniconsLine.check,
+                                                color: ColorService().successColor,
                                               ),
                                               _buildActionButton(
-                                                icon: UniconsLine.trash,
+                                                icon: UniconsLine.backpack,
                                                 color: Colors.red,
                                               ),
                                             ],
@@ -264,16 +289,11 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
       child: Row(
         spacing: 10,
         children: [
-          Expanded(
-            child: DropDownWidget(
-              label: 'ປະເພດເອກະສານ',
-              items: ['ໃບຂໍຊື້', 'ໃບະສະເໜີລາຄາ', 'ໃບສັ່ງຊື້'],
-            ),
-          ),
+         
           Expanded(
             child: DropDownWidget(
               label: 'ກຸ່ມສິນຄ້າ',
-              items: ['ໃບຂໍຊື້', 'ໃບະສະເໜີລາຄາ', 'ໃບສັ່ງຊື້'],
+              items: context.read<DocumentProvider>().category,
             ),
           ),
           Expanded(

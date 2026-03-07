@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/main.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
+import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/screens/pages/all_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
+import 'package:purchaser_edge/screens/pages/user_management_page.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:unicons/unicons.dart';
 
@@ -24,12 +26,13 @@ class _HomeScreenState extends State<HomeScreen> {
     DashBoardPage(),
     CreatePurchaseOrderPage(),
     AllDocumentPage(),
-    DashBoardPage(),
+   UserManagementPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    context.read<DocumentProvider>().startAutoFetch();
+    context.read<DocumentProvider>().startAutoFetchDocument();
+    context.read<UserProvider>().startAutoFetchUser();
 
     return Scaffold(
       body: Row(
@@ -97,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildSideBarMenu(0, UniconsLine.create_dashboard, 'ໜ້າຫຼັກ'),
               _buildSideBarMenu(1, UniconsLine.plus_circle, 'ສ້າງເອກະສານໃຫມ່'),
               _buildSideBarMenu(2, UniconsLine.file_alt, 'ເອກະສານທັງໝົດ'),
+              _buildSideBarMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ'),
             ],
           ),
 

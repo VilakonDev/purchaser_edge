@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/screens/login_screen.dart';
 
 import 'package:purchaser_edge/screens/sign_license_screen.dart';
@@ -26,6 +27,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FileProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => DocumentProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
       ],
       child: MaterialApp(
         title: 'Purchaser Edge',

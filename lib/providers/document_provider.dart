@@ -6,6 +6,18 @@ import 'package:purchaser_edge/model/document_model.dart';
 import 'package:http/http.dart' as http;
 
 class DocumentProvider extends ChangeNotifier {
+  List<String> _category = [
+    'MA.SA.AU',
+    'HT.PT.PB.GD',
+    'FT.BD.HO.FD',
+    'FC.BR',
+    'ET.LT.KC',
+    'DH.DW.HW.PA',
+    'BM',
+  ];
+
+  List<String> get category => _category;
+
   String? _documentNumber;
   String? _documentTitle;
   String? _documentCategory;
@@ -46,7 +58,7 @@ class DocumentProvider extends ChangeNotifier {
 
   Timer? timer;
 
-  void startAutoFetch() {
+  void startAutoFetchDocument() {
     timer = Timer.periodic(Duration(seconds: 10), (timer) {
       getAllDocument();
 

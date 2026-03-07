@@ -211,7 +211,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
               Expanded(
                 child: DropDownWidget(
                   label: 'ກຸ່ມເອກະສານ',
-                  items: ['HT.PT.HO', 'PA.HW.DW.DM'],
+                  items: context.read<DocumentProvider>().category,
                   onChanged: (value) {
                     setState(() {
                       documentCategory = value;
