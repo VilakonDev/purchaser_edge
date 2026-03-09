@@ -5,6 +5,7 @@ import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/screens/pages/all_document_page.dart';
+import 'package:purchaser_edge/screens/pages/approve_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
 import 'package:purchaser_edge/screens/pages/user_management_page.dart';
@@ -28,11 +29,14 @@ class _HomeScreenState extends State<HomeScreen> {
     CreatePurchaseOrderPage(),
     AllDocumentPage(),
     UserManagementPage(),
+    ApproveDocumentPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    context.read<DocumentProvider>().startAutoFetchDocument();
+    context.read<DocumentProvider>().startAutoFetchDocument(
+      context.read<AuthProvider>().currentUser!.role,
+    );
     context.read<UserProvider>().startAutoFetchUser();
 
     return Scaffold(
@@ -71,6 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSideBar() {
+    final role = context.read<AuthProvider>().currentUser!.role;
+
     Widget _buildSideBarMenu(int index, IconData icon, String label) {
       return GestureDetector(
         onTap: () {
@@ -126,8 +132,12 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildSideBarMenu(0, UniconsLine.create_dashboard, 'ໜ້າຫຼັກ'),
               _buildSideBarMenu(1, UniconsLine.plus_circle, 'ສ້າງເອກະສານໃຫມ່'),
               _buildSideBarMenu(2, UniconsLine.file_alt, 'ເອກະສານທັງໝົດ'),
-              context.read<AuthProvider>().currentUser?.role == "IT"
+
+              role == "IT"
                   ? _buildSideBarMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ')
+                  : Container(),
+              role == "DISTRICT_MANAGER" || role == "DIRECTOR"
+                  ? _buildSideBarMenu(4, UniconsLine.check, 'ອະນຸມັດ')
                   : Container(),
             ],
           ),

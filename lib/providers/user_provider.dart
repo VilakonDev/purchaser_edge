@@ -21,7 +21,7 @@ class UserProvider extends ChangeNotifier {
   List<UserModel> get users => _users;
 
   Future getAllUser() async {
-    final response = await http.get(Uri.parse('http://localhost:5000/user'));
+    final response = await http.get(Uri.parse('http://192.168.1.181:5000/user'));
 
     if (response.statusCode == 200) {
       final List userData = jsonDecode(response.body);

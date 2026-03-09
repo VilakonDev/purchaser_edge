@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AuthProvider extends ChangeNotifier {
   CurrentUserModel? currentUser;
 
-  String baseURL = "http://localhost:5000";
+  String baseURL = "http://192.168.1.181:5000";
 
   Future<String?> getDeviceID() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -19,36 +19,40 @@ class AuthProvider extends ChangeNotifier {
     if (Platform.isWindows) {
       WindowsDeviceInfo windowsInfo = await deviceInfo.windowsInfo;
 
-      return windowsInfo.deviceId;
+      return "${windowsInfo.computerName}_${windowsInfo.deviceId}";
     }
 
     return null;
   }
 
   Future<bool> verifyLicense() async {
-    SharedPreferences pref = await SharedPreferences.getInstance();
-    final licenseKey = pref.getString('license_key');
+    try {
+      SharedPreferences pref = await SharedPreferences.getInstance();
+      final licenseKey = pref.getString('license_key');
 
-    final response = await http.post(
-      Uri.parse('$baseURL/auth/license'),
-      body: {
-        "license_key": licenseKey ?? '',
-        "device_id": await getDeviceID() ?? '',
-      },
-    );
+      final response = await http.post(
+        Uri.parse('$baseURL/auth/license'),
+        body: {
+          "license_key": licenseKey ?? '',
+          "device_id": await getDeviceID() ?? '',
+        },
+      );
 
-    // สมมติ server คืน {"valid": true} เป็น json
-    if (response.statusCode == 200) {
-      final state = jsonDecode(response.body);
+      // สมมติ server คืน {"valid": true} เป็น json
+      if (response.statusCode == 200) {
+        final state = jsonDecode(response.body);
 
-      if (state['success']) {
-        return true;
+        if (state['success']) {
+          return true;
+        }
+
+        return false;
       }
 
       return false;
+    } catch (e) {
+      return false;
     }
-
-    return false;
   }
 
   Future<bool> activateLicense(String licenseKey) async {
@@ -73,7 +77,7 @@ class AuthProvider extends ChangeNotifier {
     String password,
   ) async {
     final response = await http.post(
-      Uri.parse('http://localhost:5000/auth/login'),
+      Uri.parse('http://192.168.1.181:5000/auth/login'),
       body: {"username": username, "password": password},
     );
 

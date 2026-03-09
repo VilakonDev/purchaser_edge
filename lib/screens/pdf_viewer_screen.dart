@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -15,7 +16,161 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:unicons/unicons.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Model สำหรับส่งข้อมูลไปหน้า ReviewScreen
+// Global Thumbnail Render Queue
+// ป้องกันการ open PDF file เดียวกันพร้อมกันหลาย instance
+// ─────────────────────────────────────────────────────────────────────────────
+class _ThumbnailRenderQueue {
+  static final _ThumbnailRenderQueue _instance =
+      _ThumbnailRenderQueue._internal();
+  factory _ThumbnailRenderQueue() => _instance;
+  _ThumbnailRenderQueue._internal();
+
+  // lock ต่อ filePath — ป้องกัน open file เดียวกันซ้อนกัน
+  final Map<String, Future<void>> _fileLocks = {};
+
+  // global semaphore — render ได้สูงสุด 2 งานพร้อมกัน
+  int _activeCount = 0;
+  static const int _maxConcurrent = 2;
+  final List<Completer<void>> _waitQueue = [];
+
+  Future<Uint8List?> render({
+    required String filePath,
+    required int pageNumber,
+    required int rotation,
+  }) async {
+    // รอ global slot ว่าง
+    while (_activeCount >= _maxConcurrent) {
+      final c = Completer<void>();
+      _waitQueue.add(c);
+      await c.future;
+    }
+    _activeCount++;
+
+    try {
+      // ใช้ lock ต่อ file เพื่อไม่ให้ open file เดียวกันพร้อมกัน
+      final prev = _fileLocks[filePath] ?? Future.value();
+      final myCompleter = Completer<void>();
+      _fileLocks[filePath] = myCompleter.future;
+
+      Uint8List? result;
+      try {
+        await prev;
+        result = await _doRender(filePath, pageNumber, rotation);
+      } finally {
+        myCompleter.complete();
+        if (_fileLocks[filePath] == myCompleter.future) {
+          _fileLocks.remove(filePath);
+        }
+      }
+      return result;
+    } finally {
+      _activeCount--;
+      if (_waitQueue.isNotEmpty) {
+        _waitQueue.removeAt(0).complete();
+      }
+    }
+  }
+
+  Future<Uint8List?> _doRender(
+      String filePath, int pageNumber, int rotation) async {
+    pdfrx.PdfDocument? document;
+    try {
+      document = await pdfrx.PdfDocument.openFile(filePath);
+
+      final int totalPages = document.pages.length;
+      if (pageNumber < 1 || pageNumber > totalPages) {
+        debugPrint(
+            '[Thumbnail] page $pageNumber out of range (total=$totalPages)');
+        return null;
+      }
+
+      final page = document.pages[pageNumber - 1];
+
+      // target ด้านยาวไม่เกิน 1200px
+      const double targetLong = 1200.0;
+      final double scale = page.width >= page.height
+          ? targetLong / page.width
+          : targetLong / page.height;
+      final int imgW = (page.width * scale).round().clamp(1, 1200);
+      final int imgH = (page.height * scale).round().clamp(1, 1200);
+
+      final pdfrx.PdfImage? pageImage = await page.render(
+        fullWidth: imgW.toDouble(),
+        fullHeight: imgH.toDouble(),
+      );
+
+      if (pageImage == null) return null;
+
+      // ✅ copy pixels ทันทีก่อน dispose
+      final Uint8List pixelsCopy = Uint8List.fromList(pageImage.pixels);
+      final int pw = pageImage.width;
+      final int ph = pageImage.height;
+
+      // dispose document ก่อน heavy work
+      document.dispose();
+      document = null;
+
+      final ui.ImmutableBuffer buffer =
+          await ui.ImmutableBuffer.fromUint8List(pixelsCopy);
+      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
+        buffer,
+        width: pw,
+        height: ph,
+        pixelFormat: ui.PixelFormat.rgba8888,
+      );
+      final ui.Codec codec = await descriptor.instantiateCodec();
+      final ui.FrameInfo frameInfo = await codec.getNextFrame();
+      final ByteData? byteData =
+          await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
+      frameInfo.image.dispose();
+      codec.dispose();
+
+      if (byteData == null) return null;
+
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+      return rotation == 0 ? pngBytes : await _rotateImage(pngBytes, rotation);
+    } catch (e, st) {
+      debugPrint('[Thumbnail] _doRender error page=$pageNumber: $e\n$st');
+      return null;
+    } finally {
+      document?.dispose();
+    }
+  }
+
+  Future<Uint8List> _rotateImage(Uint8List src, int rotation) async {
+    final ui.Codec codec = await ui.instantiateImageCodec(src);
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    final ui.Image img = frame.image;
+    codec.dispose();
+
+    final int w = img.width;
+    final int h = img.height;
+    final bool swap = rotation == 90 || rotation == 270;
+    final int cw = swap ? h : w;
+    final int ch = swap ? w : h;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.translate(cw / 2, ch / 2);
+    canvas.rotate(rotation * 3.141592653589793 / 180.0);
+    canvas.translate(-w / 2, -h / 2);
+    canvas.drawImage(img, Offset.zero, Paint());
+
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image rotated = await picture.toImage(cw, ch);
+    img.dispose();
+
+    final ByteData? bd =
+        await rotated.toByteData(format: ui.ImageByteFormat.png);
+    rotated.dispose();
+    return bd!.buffer.asUint8List();
+  }
+}
+
+final _thumbnailQueue = _ThumbnailRenderQueue();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Models
 // ─────────────────────────────────────────────────────────────────────────────
 class ReviewDocumentData {
   final List<PageInfo> pages;
@@ -29,6 +184,9 @@ class ReviewDocumentData {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PdfViewerScreen
+// ─────────────────────────────────────────────────────────────────────────────
 class PdfViewerScreen extends StatefulWidget {
   @override
   _PdfViewerScreenState createState() => _PdfViewerScreenState();
@@ -65,19 +223,16 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   void _onProviderChanged() {
-    if (mounted) {
-      _syncFromProvider();
-    }
+    if (mounted) _syncFromProvider();
   }
 
   Future<void> _syncFromProvider() async {
     if (!mounted) return;
-
     final providerFiles = _fileProvider.files;
-    final newPaths = providerFiles.map((f) => f.path).toList();
-    if (_listEquals(newPaths, _loadedFilePaths)) return;
-    _loadedFilePaths = List.from(newPaths);
-    await _loadFilesFromProvider(providerFiles);
+    final newIds = providerFiles.map((f) => f.id).toList();
+    if (_listEquals(newIds, _loadedFilePaths)) return;
+    _loadedFilePaths = List.from(newIds);
+    await _loadFilesFromProvider(providerFiles.map((f) => f.file).toList());
   }
 
   bool _listEquals(List<String> a, List<String> b) {
@@ -105,13 +260,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       try {
         final bytes = await file.readAsBytes();
         final doc = PdfDocument(inputBytes: bytes);
-        loaded.add(
-          PdfFileInfo(
-            filePath: file.path,
-            fileName: file.path.split('/').last,
-            pageCount: doc.pages.count,
-          ),
-        );
+        loaded.add(PdfFileInfo(
+          filePath: file.path,
+          fileName: file.path.split('/').last,
+          pageCount: doc.pages.count,
+        ));
         doc.dispose();
       } catch (e) {
         debugPrint('Error loading ${file.path}: $e');
@@ -137,7 +290,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         debugPrint('Error removing listener: $e');
       }
     }
-
     _previewScrollController.dispose();
     _thumbnailScrollController.dispose();
     _pageSizeCache.clear();
@@ -145,39 +297,33 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Navigate to ReviewScreen พร้อมส่งข้อมูลทั้งหมด
-  // ─────────────────────────────────────────────────────────────────────────
   void _navigateToReview() {
     if (pdfFiles.isEmpty) return;
 
-    // Deep copy signatures เพื่อป้องกัน mutation
     final Map<int, List<SignatureInfo>> copiedSignatures = {};
     pageSignatures.forEach((key, sigs) {
       copiedSignatures[key] = sigs
-          .map(
-            (s) => SignatureInfo(
-              imageBytes: Uint8List.fromList(s.imageBytes),
-              left: s.left,
-              top: s.top,
-              width: s.width,
-              height: s.height,
-              pageIndex: s.pageIndex,
-            ),
-          )
+          .map((s) => SignatureInfo(
+                imageBytes: Uint8List.fromList(s.imageBytes),
+                left: s.left,
+                top: s.top,
+                width: s.width,
+                height: s.height,
+                pageIndex: s.pageIndex,
+              ))
           .toList();
     });
-
-    final reviewData = ReviewDocumentData(
-      pages: List.from(allPages),
-      pageRotations: Map.from(pageRotations),
-      pageSignatures: copiedSignatures,
-    );
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ReviewScreen(documentData: reviewData),
+        builder: (_) => ReviewScreen(
+          documentData: ReviewDocumentData(
+            pages: List.from(allPages),
+            pageRotations: Map.from(pageRotations),
+            pageSignatures: copiedSignatures,
+          ),
+        ),
       ),
     );
   }
@@ -187,545 +333,372 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // ========== Header Bar ==========
+          // ========== Header ==========
           Container(
             width: double.infinity,
             height: 60,
-            decoration: BoxDecoration(
-              gradient: ColorService().mainGredientColor,
-            ),
+            decoration:
+                BoxDecoration(gradient: ColorService().mainGredientColor),
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Back Button
                 GestureDetector(
-                  onTap: () {
-                    Future.microtask(() {
-                      if (mounted) {
-                        Navigator.pop(context);
-                      }
-                    });
-                  },
+                  onTap: () =>
+                      Future.microtask(() => mounted ? Navigator.pop(context) : null),
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 20),
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      spacing: 10,
-                      children: [
-                        Icon(UniconsLine.arrow_left),
-                        Text(
-                          'ກັບຄືນ',
-                          style: TextStyle(color: ColorService().mainTextColor),
-                        ),
-                      ],
-                    ),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Row(spacing: 10, children: [
+                      Icon(UniconsLine.arrow_left),
+                      Text('ກັບຄືນ',
+                          style:
+                              TextStyle(color: ColorService().mainTextColor)),
+                    ]),
                   ),
                 ),
-                // Action Buttons
-                Row(
-                  spacing: 10,
-                  children: [
-                    // Add Signature Button
-                    if (selectedPageIndex != null)
-                      GestureDetector(
-                        onTap: () {
-                          pickSignature();
-                        },
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 20),
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            spacing: 10,
-                            children: [
-                              Text(
-                                'ເພີ່ມລາຍເຊັນ',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                              Icon(Icons.edit_road, color: Colors.white),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                    // ===== ປຸ່ມ ດຳເນີນການຕໍ່ =====
+                Row(spacing: 10, children: [
+                  if (selectedPageIndex != null)
                     GestureDetector(
-                      onTap: _navigateToReview,
+                      onTap: pickSignature,
                       child: Container(
                         padding: EdgeInsets.symmetric(horizontal: 20),
                         height: 40,
                         decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Row(spacing: 10, children: [
+                          Text('ເພີ່ມລາຍເຊັນ',
+                              style: TextStyle(color: Colors.white)),
+                          Icon(Icons.edit_road, color: Colors.white),
+                        ]),
+                      ),
+                    ),
+                  GestureDetector(
+                    onTap: _navigateToReview,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      height: 40,
+                      decoration: BoxDecoration(
                           color: pdfFiles.isEmpty
                               ? Colors.grey.shade300
                               : Colors.green.shade300,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          spacing: 10,
-                          children: [
-                            Text(
-                              'ດຳເນີນການຕໍ່',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            Icon(UniconsLine.sign_out_alt, color: Colors.white),
-                          ],
-                        ),
-                      ),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: Row(spacing: 10, children: [
+                        Text('ດຳເນີນການຕໍ່',
+                            style: TextStyle(color: Colors.white)),
+                        Icon(UniconsLine.sign_out_alt, color: Colors.white),
+                      ]),
                     ),
-                  ],
-                ),
+                  ),
+                ]),
               ],
             ),
           ),
-          // ========== Main Content ==========
+          // ========== Body ==========
           Expanded(
-            child: Row(
-              children: [
-                // ========== Left Sidebar - Thumbnails ==========
-                Container(
-                  width: 220,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      right: BorderSide(color: Colors.grey.shade300, width: 1),
-                    ),
-                    color: Colors.grey.shade50,
-                  ),
-                  child: Column(
-                    children: [
-                      // Header
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        color: Colors.blue.shade50,
-                        child: Row(
-                          children: [
-                            Icon(Icons.view_module, color: Colors.blue, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'ເອກະສານທັງໝົດ',
-                                style: TextStyle(
+            child: Row(children: [
+              // ── Sidebar ──
+              Container(
+                width: 220,
+                decoration: BoxDecoration(
+                  border: Border(
+                      right:
+                          BorderSide(color: Colors.grey.shade300, width: 1)),
+                  color: Colors.grey.shade50,
+                ),
+                child: Column(children: [
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    color: Colors.blue.shade50,
+                    child: Row(children: [
+                      Icon(Icons.view_module, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                          child: Text('ເອກະສານທັງໝົດ',
+                              style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.bold))),
+                    ]),
+                  ),
+                  Expanded(
+                    child: pdfFiles.isEmpty
+                        ? Center(
+                            child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                Icon(Icons.picture_as_pdf,
+                                    size: 40, color: Colors.grey),
+                                SizedBox(height: 8),
+                                Text('ຍັງບໍ່ມີເອກະສານ',
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12)),
+                              ]))
+                        : ReorderableListView.builder(
+                            scrollController: _thumbnailScrollController,
+                            physics: ClampingScrollPhysics(),
+                            padding: EdgeInsets.all(8),
+                            itemCount: getAllPages().length,
+                            onReorder: _onReorder,
+                            itemBuilder: _buildThumbnailItem,
+                          ),
+                  ),
+                ]),
+              ),
+              // ── Preview ──
+              Expanded(
+                child: pdfFiles.isEmpty
+                    ? Center(
+                        child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                            Icon(Icons.picture_as_pdf_outlined,
+                                size: 80, color: Colors.grey.shade300),
+                            SizedBox(height: 16),
+                            Text('ບໍ່ມີເອກະສານ',
+                                style:
+                                    TextStyle(color: Colors.grey, fontSize: 16)),
+                          ]))
+                    : Container(
+                        color: Colors.grey.shade200,
+                        child: Center(
+                          child: selectedPageIndex != null
+                              ? SinglePagePreview(
+                                  pageInfo:
+                                      getAllPages()[selectedPageIndex!],
+                                  pageIndex: selectedPageIndex!,
+                                  rotation:
+                                      pageRotations[selectedPageIndex!] ?? 0,
+                                  signatures:
+                                      pageSignatures[selectedPageIndex!] ?? [],
+                                  onSignatureUpdate: (idx, s) {
+                                    setState(() {
+                                      pageSignatures[selectedPageIndex!]![idx] =
+                                          s;
+                                    });
+                                  },
+                                  onSignatureDelete: (idx) {
+                                    setState(() {
+                                      pageSignatures[selectedPageIndex!]!
+                                          .removeAt(idx);
+                                      if (pageSignatures[selectedPageIndex!]!
+                                          .isEmpty) {
+                                        pageSignatures
+                                            .remove(selectedPageIndex!);
+                                      }
+                                    });
+                                  },
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.touch_app,
+                                        size: 80,
+                                        color: Colors.grey.shade400),
+                                    SizedBox(height: 16),
+                                    Text('ກົດເລືອກຫນ້າຈາກດ້ານຊ້າຍ',
+                                        style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 16)),
+                                  ],
                                 ),
-                              ),
-                            ),
-                          ],
                         ),
                       ),
-                      // Thumbnails List
-                      Expanded(
-                        child: pdfFiles.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.picture_as_pdf,
-                                        size: 40, color: Colors.grey),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'ຍັງບໍ່ມີເອກະສານ',
-                                      style: TextStyle(
-                                          color: Colors.grey, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ReorderableListView.builder(
-                                scrollController: _thumbnailScrollController,
-                                physics: ClampingScrollPhysics(),
-                                padding: EdgeInsets.all(8),
-                                itemCount: getAllPages().length,
-                                onReorder: (oldIndex, newIndex) {
-                                  setState(() {
-                                    if (newIndex > oldIndex) newIndex -= 1;
-                                    final page = allPages.removeAt(oldIndex);
-                                    allPages.insert(newIndex, page);
-                                    _pageKeys.clear();
-                                    _thumbnailKeys.clear();
-                                    for (int i = 0; i < allPages.length; i++) {
-                                      _pageKeys[i] = GlobalKey();
-                                      _thumbnailKeys[i] = GlobalKey();
-                                    }
-                                    Map<int, List<SignatureInfo>> newSignatures = {};
-                                    pageSignatures.forEach((key, signatures) {
-                                      int newKey = key;
-                                      if (key == oldIndex) {
-                                        newKey = newIndex;
-                                      } else if (oldIndex < newIndex &&
-                                          key > oldIndex &&
-                                          key <= newIndex) {
-                                        newKey = key - 1;
-                                      } else if (oldIndex > newIndex &&
-                                          key >= newIndex &&
-                                          key < oldIndex) {
-                                        newKey = key + 1;
-                                      }
-                                      newSignatures[newKey] = signatures
-                                          .map((sig) => SignatureInfo(
-                                                imageBytes: sig.imageBytes,
-                                                left: sig.left,
-                                                top: sig.top,
-                                                width: sig.width,
-                                                height: sig.height,
-                                                pageIndex: newKey,
-                                              ))
-                                          .toList();
-                                    });
-                                    pageSignatures = newSignatures;
-                                    Map<int, int> newRotations = {};
-                                    pageRotations.forEach((key, rotation) {
-                                      int newKey = key;
-                                      if (key == oldIndex) {
-                                        newKey = newIndex;
-                                      } else if (oldIndex < newIndex &&
-                                          key > oldIndex &&
-                                          key <= newIndex) {
-                                        newKey = key - 1;
-                                      } else if (oldIndex > newIndex &&
-                                          key >= newIndex &&
-                                          key < oldIndex) {
-                                        newKey = key + 1;
-                                      }
-                                      newRotations[newKey] = rotation;
-                                    });
-                                    pageRotations = newRotations;
-                                    if (selectedPageIndex != null) {
-                                      if (selectedPageIndex == oldIndex) {
-                                        selectedPageIndex = newIndex;
-                                      } else if (oldIndex < newIndex &&
-                                          selectedPageIndex! > oldIndex &&
-                                          selectedPageIndex! <= newIndex) {
-                                        selectedPageIndex = selectedPageIndex! - 1;
-                                      } else if (oldIndex > newIndex &&
-                                          selectedPageIndex! >= newIndex &&
-                                          selectedPageIndex! < oldIndex) {
-                                        selectedPageIndex = selectedPageIndex! + 1;
-                                      }
-                                    }
-                                  });
-                                },
-                                itemBuilder: (context, index) {
-                                  final pageInfo = getAllPages()[index];
-                                  bool isSelected = selectedPageIndex == index;
-                                  bool hasSignature =
-                                      pageSignatures.containsKey(index) &&
-                                          pageSignatures[index]!.isNotEmpty;
-
-                                  return GestureDetector(
-                                    key: ValueKey('page_$index'),
-                                    onTap: () {
-                                      setState(() {
-                                        selectedPageIndex = index;
-                                      });
-                                    },
-                                    child: Container(
-                                      key: _thumbnailKeys[index],
-                                      margin: EdgeInsets.only(bottom: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? Colors.blue
-                                              : Colors.grey.shade300,
-                                          width: isSelected ? 2 : 1,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 2,
-                                            offset: Offset(0, 1),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          // Toolbar
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                                vertical: 4, horizontal: 8),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Icon(Icons.drag_handle,
-                                                    color: Colors.grey.shade400,
-                                                    size: 20),
-                                                Row(
-                                                  children: [
-                                                    if (hasSignature)
-                                                      Padding(
-                                                        padding:
-                                                            EdgeInsets.only(right: 4),
-                                                        child: Container(
-                                                          padding: EdgeInsets.symmetric(
-                                                              horizontal: 6,
-                                                              vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color:
-                                                                Colors.blue.shade50,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                    10),
-                                                          ),
-                                                          child: Row(
-                                                            children: [
-                                                              Icon(Icons.edit,
-                                                                  color: Colors.blue,
-                                                                  size: 14),
-                                                              SizedBox(width: 2),
-                                                              Text(
-                                                                '${pageSignatures[index]!.length}',
-                                                                style: TextStyle(
-                                                                    color:
-                                                                        Colors.blue,
-                                                                    fontSize: 11,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setState(() {
-                                                          int currentRotation =
-                                                              pageRotations[index] ??
-                                                                  0;
-                                                          pageRotations[index] =
-                                                              (currentRotation + 90) %
-                                                                  360;
-                                                        });
-                                                      },
-                                                      child: Container(
-                                                        padding: EdgeInsets.all(4),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.blue.shade50,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                  4),
-                                                        ),
-                                                        child: Icon(
-                                                            Icons.rotate_right,
-                                                            color: Colors.blue,
-                                                            size: 18),
-                                                      ),
-                                                    ),
-                                                    SizedBox(width: 4),
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setState(() {
-                                                          if (selectedPageIndex ==
-                                                              index) {
-                                                            selectedPageIndex = null;
-                                                          } else if (selectedPageIndex !=
-                                                                  null &&
-                                                              selectedPageIndex! >
-                                                                  index) {
-                                                            selectedPageIndex =
-                                                                selectedPageIndex! - 1;
-                                                          }
-                                                          allPages.removeAt(index);
-                                                          pageSignatures
-                                                              .remove(index);
-                                                          pageRotations.remove(index);
-                                                          Map<int,
-                                                                  List<SignatureInfo>>
-                                                              updatedSignatures = {};
-                                                          pageSignatures.forEach(
-                                                              (key, value) {
-                                                            updatedSignatures[key >
-                                                                    index
-                                                                ? key - 1
-                                                                : key] = value;
-                                                          });
-                                                          pageSignatures =
-                                                              updatedSignatures;
-                                                          Map<int, int>
-                                                              updatedRotations = {};
-                                                          pageRotations
-                                                              .forEach((key, value) {
-                                                            updatedRotations[key >
-                                                                    index
-                                                                ? key - 1
-                                                                : key] = value;
-                                                          });
-                                                          pageRotations =
-                                                              updatedRotations;
-                                                          _pageKeys.remove(index);
-                                                          _thumbnailKeys
-                                                              .remove(index);
-                                                          String cacheKey =
-                                                              '${pageInfo.filePath}_${pageInfo.pageNumber}';
-                                                          _pageSizeCache
-                                                              .remove(cacheKey);
-                                                        });
-                                                      },
-                                                      child: Container(
-                                                        padding: EdgeInsets.all(4),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.red.shade50,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                  4),
-                                                        ),
-                                                        child: Icon(
-                                                            Icons.delete_outline,
-                                                            color: Colors.red,
-                                                            size: 18),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          // Thumbnail Image
-                                          Padding(
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 4),
-                                            child: OptimizedPdfThumbnail(
-                                              filePath: pageInfo.filePath,
-                                              pageNumber: pageInfo.pageNumber,
-                                              rotation:
-                                                  pageRotations[index] ?? 0,
-                                            ),
-                                          ),
-                                          // Page Number
-                                          Container(
-                                            width: double.infinity,
-                                            padding: EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? Colors.blue.shade50
-                                                  : Colors.white,
-                                              borderRadius: BorderRadius.vertical(
-                                                  bottom: Radius.circular(7)),
-                                            ),
-                                            child: Text(
-                                              'ຫນ້າ ${index + 1}',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.black87,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-                // ========== Right Content - PDF Preview ==========
-                Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: pdfFiles.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.picture_as_pdf_outlined,
-                                        size: 80,
-                                        color: Colors.grey.shade300),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'ບໍ່ມີເອກະສານ',
-                                      style: TextStyle(
-                                          color: Colors.grey, fontSize: 16),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : Container(
-                                color: Colors.grey.shade200,
-                                child: Center(
-                                  child: selectedPageIndex != null
-                                      ? SinglePagePreview(
-                                          pageInfo:
-                                              getAllPages()[selectedPageIndex!],
-                                          pageIndex: selectedPageIndex!,
-                                          rotation:
-                                              pageRotations[selectedPageIndex!] ??
-                                                  0,
-                                          signatures:
-                                              pageSignatures[selectedPageIndex!] ??
-                                                  [],
-                                          onSignatureUpdate:
-                                              (index, updatedSignature) {
-                                            setState(() {
-                                              pageSignatures[selectedPageIndex!]![
-                                                  index] = updatedSignature;
-                                            });
-                                          },
-                                          onSignatureDelete: (index) {
-                                            setState(() {
-                                              pageSignatures[selectedPageIndex!]!
-                                                  .removeAt(index);
-                                              if (pageSignatures[
-                                                      selectedPageIndex!]!
-                                                  .isEmpty) {
-                                                pageSignatures
-                                                    .remove(selectedPageIndex!);
-                                              }
-                                            });
-                                          },
-                                        )
-                                      : Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.touch_app,
-                                                size: 80,
-                                                color: Colors.grey.shade400),
-                                            SizedBox(height: 16),
-                                            Text(
-                                              'ກົດເລືອກຫນ້າຈາກດ້ານຊ້າຍ',
-                                              style: TextStyle(
-                                                  color: Colors.grey.shade600,
-                                                  fontSize: 16),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ]),
           ),
         ],
       ),
     );
   }
 
-  int getTotalPages() {
-    return pdfFiles.fold(0, (sum, file) => sum + file.pageCount);
+  void _onReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final page = allPages.removeAt(oldIndex);
+      allPages.insert(newIndex, page);
+      _pageKeys.clear();
+      _thumbnailKeys.clear();
+      for (int i = 0; i < allPages.length; i++) {
+        _pageKeys[i] = GlobalKey();
+        _thumbnailKeys[i] = GlobalKey();
+      }
+
+      int remap(int key) {
+        if (key == oldIndex) return newIndex;
+        if (oldIndex < newIndex && key > oldIndex && key <= newIndex) {
+          return key - 1;
+        }
+        if (oldIndex > newIndex && key >= newIndex && key < oldIndex) {
+          return key + 1;
+        }
+        return key;
+      }
+
+      final ns = <int, List<SignatureInfo>>{};
+      pageSignatures.forEach((k, v) {
+        final nk = remap(k);
+        ns[nk] = v.map((s) => SignatureInfo(
+          imageBytes: s.imageBytes, left: s.left, top: s.top,
+          width: s.width, height: s.height, pageIndex: nk,
+        )).toList();
+      });
+      pageSignatures = ns;
+
+      final nr = <int, int>{};
+      pageRotations.forEach((k, v) => nr[remap(k)] = v);
+      pageRotations = nr;
+
+      if (selectedPageIndex != null) {
+        selectedPageIndex = remap(selectedPageIndex!);
+      }
+    });
   }
 
-  List<PageInfo> getAllPages() {
-    return allPages;
+  Widget _buildThumbnailItem(BuildContext context, int index) {
+    final pageInfo = getAllPages()[index];
+    final bool isSelected = selectedPageIndex == index;
+    final bool hasSignature = pageSignatures.containsKey(index) &&
+        pageSignatures[index]!.isNotEmpty;
+
+    return GestureDetector(
+      key: ValueKey('${pageInfo.filePath}_${pageInfo.pageNumber}'),
+      onTap: () => setState(() => selectedPageIndex = index),
+      child: Container(
+        key: _thumbnailKeys[index],
+        margin: EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))
+          ],
+        ),
+        child: Column(children: [
+          // toolbar
+          Container(
+            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(Icons.drag_handle, color: Colors.grey.shade400, size: 20),
+                Row(children: [
+                  if (hasSignature)
+                    Padding(
+                      padding: EdgeInsets.only(right: 4),
+                      child: Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(children: [
+                          Icon(Icons.edit, color: Colors.blue, size: 14),
+                          SizedBox(width: 2),
+                          Text('${pageSignatures[index]!.length}',
+                              style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ]),
+                      ),
+                    ),
+                  // rotate
+                  InkWell(
+                    onTap: () => setState(() {
+                      pageRotations[index] =
+                          ((pageRotations[index] ?? 0) + 90) % 360;
+                    }),
+                    child: Container(
+                      padding: EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(4)),
+                      child: Icon(Icons.rotate_right,
+                          color: Colors.blue, size: 18),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  // delete
+                  InkWell(
+                    onTap: () => setState(() {
+                      if (selectedPageIndex == index) {
+                        selectedPageIndex = null;
+                      } else if (selectedPageIndex != null &&
+                          selectedPageIndex! > index) {
+                        selectedPageIndex = selectedPageIndex! - 1;
+                      }
+                      allPages.removeAt(index);
+                      pageSignatures.remove(index);
+                      pageRotations.remove(index);
+                      final us = <int, List<SignatureInfo>>{};
+                      pageSignatures
+                          .forEach((k, v) => us[k > index ? k - 1 : k] = v);
+                      pageSignatures = us;
+                      final ur = <int, int>{};
+                      pageRotations
+                          .forEach((k, v) => ur[k > index ? k - 1 : k] = v);
+                      pageRotations = ur;
+                      _pageKeys.remove(index);
+                      _thumbnailKeys.remove(index);
+                      _pageSizeCache.remove(
+                          '${pageInfo.filePath}_${pageInfo.pageNumber}');
+                    }),
+                    child: Container(
+                      padding: EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(4)),
+                      child: Icon(Icons.delete_outline,
+                          color: Colors.red, size: 18),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          // thumbnail widget
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: OptimizedPdfThumbnail(
+              filePath: pageInfo.filePath,
+              pageNumber: pageInfo.pageNumber,
+              rotation: pageRotations[index] ?? 0,
+            ),
+          ),
+          // label
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blue.shade50 : Colors.white,
+              borderRadius:
+                  BorderRadius.vertical(bottom: Radius.circular(7)),
+            ),
+            child: Text(
+              'ຫນ້າ ${index + 1}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
+
+  int getTotalPages() => pdfFiles.fold(0, (s, f) => s + f.pageCount);
+  List<PageInfo> getAllPages() => allPages;
 
   void rebuildAllPages() {
     allPages.clear();
@@ -735,7 +708,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     pageSignatures.clear();
     selectedPageIndex = null;
     _pageSizeCache.clear();
-
     int index = 0;
     for (var file in pdfFiles) {
       for (int i = 1; i <= file.pageCount; i++) {
@@ -753,69 +725,56 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<Size> getPageSizeCached(String filePath, int pageNumber) async {
-    String cacheKey = '${filePath}_$pageNumber';
-    if (_pageSizeCache.containsKey(cacheKey)) {
-      return _pageSizeCache[cacheKey]!;
-    }
+    final key = '${filePath}_$pageNumber';
+    if (_pageSizeCache.containsKey(key)) return _pageSizeCache[key]!;
     final bytes = await File(filePath).readAsBytes();
-    PdfDocument doc = PdfDocument(inputBytes: bytes);
-    Size size = doc.pages[pageNumber - 1].size;
+    final doc = PdfDocument(inputBytes: bytes);
+    final size = doc.pages[pageNumber - 1].size;
     doc.dispose();
-    _pageSizeCache[cacheKey] = size;
+    _pageSizeCache[key] = size;
     return size;
   }
 
   Future<void> pickSignature() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-    );
-    if (result != null && result.files.single.path != null) {
-      final bytes = await File(result.files.single.path!).readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 800);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final compressedBytes = byteData!.buffer.asUint8List();
-      double aspectRatio = image.width / image.height;
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null || result.files.single.path == null) return;
 
-      if (selectedPageIndex != null && mounted) {
-        final pageInfo = getAllPages()[selectedPageIndex!];
-        final originalSize = await getPageSizeCached(
-          pageInfo.filePath,
-          pageInfo.pageNumber,
-        );
-        final rotation = pageRotations[selectedPageIndex!] ?? 0;
+    final bytes = await File(result.files.single.path!).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 800);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final compressedBytes = byteData!.buffer.asUint8List();
+    final double ar = image.width / image.height;
 
-        Size rotatedSize = originalSize;
-        if (rotation == 90 || rotation == 270) {
-          rotatedSize = Size(originalSize.height, originalSize.width);
-        }
+    if (selectedPageIndex != null && mounted) {
+      final pageInfo = getAllPages()[selectedPageIndex!];
+      final originalSize =
+          await getPageSizeCached(pageInfo.filePath, pageInfo.pageNumber);
+      final rotation = pageRotations[selectedPageIndex!] ?? 0;
 
-        double signatureWidthRatio = 3.0 / 21.0;
-        if (rotatedSize.width > rotatedSize.height) {
-          signatureWidthRatio = 3.0 / 29.7;
-        }
-        double sigWidth = signatureWidthRatio;
-        double sigHeight = sigWidth / aspectRatio;
-
-        setState(() {
-          if (!pageSignatures.containsKey(selectedPageIndex!)) {
-            pageSignatures[selectedPageIndex!] = [];
-          }
-          pageSignatures[selectedPageIndex!]!.add(
-            SignatureInfo(
-              imageBytes: compressedBytes,
-              left: 0.05,
-              top: 0.85,
-              width: sigWidth,
-              height: sigHeight,
-              pageIndex: selectedPageIndex!,
-            ),
-          );
-        });
+      Size rotatedSize = originalSize;
+      if (rotation == 90 || rotation == 270) {
+        rotatedSize = Size(originalSize.height, originalSize.width);
       }
-      image.dispose();
+
+      final double sigWidth = rotatedSize.width > rotatedSize.height
+          ? 3.0 / 29.7
+          : 3.0 / 21.0;
+
+      setState(() {
+        pageSignatures.putIfAbsent(selectedPageIndex!, () => []);
+        pageSignatures[selectedPageIndex!]!.add(SignatureInfo(
+          imageBytes: compressedBytes,
+          left: 0.05,
+          top: 0.85,
+          width: sigWidth,
+          height: sigWidth / ar,
+          pageIndex: selectedPageIndex!,
+        ));
+      });
     }
+    image.dispose();
   }
 
   Future<Uint8List> mergeFromPages(List<PageInfo> pages) async {
@@ -869,9 +828,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       newPage.graphics.restore();
 
       if (pageSignatures.containsKey(i)) {
-        for (final SignatureInfo sig in pageSignatures[i]!) {
-          double sl, st, sw, sh;
+        for (final sig in pageSignatures[i]!) {
           final bool wasFlipped = (a.width - rW).abs() > 1.0;
+          double sl, st, sw, sh;
           if (!wasFlipped) {
             sl = sig.left * a.width;
             st = sig.top * a.height;
@@ -883,8 +842,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             sw = sig.height * a.width;
             sh = sig.width * a.height;
           }
-          final PdfBitmap bmp = PdfBitmap(sig.imageBytes);
-          newPage.graphics.drawImage(bmp, Rect.fromLTWH(sl, st, sw, sh));
+          newPage.graphics.drawImage(
+              PdfBitmap(sig.imageBytes), Rect.fromLTWH(sl, st, sw, sh));
         }
       }
 
@@ -898,11 +857,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     if (pageBytesList.length == 1) return pageBytesList.first;
 
     final PdfDocument mergedDoc = PdfDocument();
-
-    for (int i = 0; i < pageBytesList.length; i++) {
-      final PdfDocument srcDoc = PdfDocument(inputBytes: pageBytesList[i]);
-      final PdfPage srcPage = srcDoc.pages[0];
-      final Size srcSize = srcPage.size;
+    for (final pb in pageBytesList) {
+      final srcDoc = PdfDocument(inputBytes: pb);
+      final srcPage = srcDoc.pages[0];
+      final srcSize = srcPage.size;
 
       mergedDoc.pageSettings.margins.all = 0;
       mergedDoc.pageSettings.size = srcSize;
@@ -910,9 +868,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           ? PdfPageOrientation.landscape
           : PdfPageOrientation.portrait;
 
-      final PdfPage destPage = mergedDoc.pages.add();
-      final Size da = destPage.size;
-      final PdfTemplate srcTmpl = srcPage.createTemplate();
+      final destPage = mergedDoc.pages.add();
+      final da = destPage.size;
+      final srcTmpl = srcPage.createTemplate();
 
       if ((da.width - srcSize.width).abs() < 1.0) {
         destPage.graphics.drawPdfTemplate(srcTmpl, Offset.zero, srcSize);
@@ -923,20 +881,18 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         destPage.graphics.drawPdfTemplate(srcTmpl, Offset.zero, srcSize);
         destPage.graphics.restore();
       }
-
       srcDoc.dispose();
     }
 
-    final List<int> mergedBytes = await mergedDoc.save();
+    final mergedBytes = await mergedDoc.save();
     mergedDoc.dispose();
     return Uint8List.fromList(mergedBytes);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OptimizedPdfThumbnail Widget  ← แก้ไข race condition + retry ที่นี่
+// OptimizedPdfThumbnail
 // ─────────────────────────────────────────────────────────────────────────────
-
 class OptimizedPdfThumbnail extends StatefulWidget {
   final String filePath;
   final int pageNumber;
@@ -957,14 +913,12 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
   Uint8List? _imageBytes;
   bool _isLoading = true;
   bool _hasError = false;
-
-  /// เพิ่มทุกครั้งที่เริ่ม load ใหม่ ใช้เป็น cancellation token
   int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadThumbnail();
+    _startLoad();
   }
 
   @override
@@ -973,47 +927,56 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
     if (oldWidget.filePath != widget.filePath ||
         oldWidget.pageNumber != widget.pageNumber ||
         oldWidget.rotation != widget.rotation) {
-      // ยกเลิก load รุ่นเก่า แล้วเริ่มใหม่
       _loadGeneration++;
-      _loadThumbnail();
+      _startLoad();
     }
   }
 
   String get _cacheKey =>
       '${widget.filePath}_${widget.pageNumber}_${widget.rotation}';
 
-  Future<void> _loadThumbnail() async {
-    if (!mounted) return;
+  void _startLoad() {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
+    _loadWithRetry();
+  }
 
-    // จด generation ที่ตัวเองกำลัง load อยู่
-    final int myGeneration = _loadGeneration;
+  Future<void> _loadWithRetry() async {
+    final int myGen = _loadGeneration;
 
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
-
-    // ตรวจ cache ก่อน
+    // ✅ ตรวจ cache ก่อน
     if (pdfThumbnailCache.containsKey(_cacheKey)) {
-      if (!mounted || myGeneration != _loadGeneration) return;
+      if (!mounted || myGen != _loadGeneration) return;
       setState(() {
         _imageBytes = pdfThumbnailCache[_cacheKey];
         _isLoading = false;
+        _hasError = false;
       });
       return;
     }
 
-    // ลอง render ไม่เกิน 3 ครั้ง
-    const int maxRetries = 3;
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
-      // ถูก cancel แล้ว → หยุดทันที
-      if (!mounted || myGeneration != _loadGeneration) return;
+    // ✅ exponential backoff retry: 0ms, 400ms, 1000ms, 2000ms
+    const delays = [0, 400, 1000, 2000];
+    for (int attempt = 0; attempt < delays.length; attempt++) {
+      if (!mounted || myGen != _loadGeneration) return;
+
+      if (delays[attempt] > 0) {
+        await Future.delayed(Duration(milliseconds: delays[attempt]));
+        if (!mounted || myGen != _loadGeneration) return;
+      }
 
       try {
-        final Uint8List? result = await _renderThumbnail();
+        final Uint8List? result = await _thumbnailQueue.render(
+          filePath: widget.filePath,
+          pageNumber: widget.pageNumber,
+          rotation: widget.rotation,
+        );
 
-        // ตรวจอีกครั้งหลัง await
-        if (!mounted || myGeneration != _loadGeneration) return;
+        if (!mounted || myGen != _loadGeneration) return;
 
         if (result != null) {
           pdfThumbnailCache[_cacheKey] = result;
@@ -1022,109 +985,22 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
             _isLoading = false;
             _hasError = false;
           });
-          return; // สำเร็จ ออกจาก loop
+          return;
         }
-      } catch (e) {
-        debugPrint('Thumbnail attempt ${attempt + 1} error: $e');
-      }
 
-      // รอก่อน retry (ยกเว้น attempt สุดท้าย)
-      if (attempt < maxRetries - 1) {
-        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+        debugPrint(
+            '[Thumbnail] attempt ${attempt + 1} returned null — page ${widget.pageNumber}');
+      } catch (e) {
+        debugPrint(
+            '[Thumbnail] attempt ${attempt + 1} threw — page ${widget.pageNumber}: $e');
       }
     }
 
-    // ถ้าถึงนี่แปลว่า retry หมดแล้วยังไม่ได้
-    if (!mounted || myGeneration != _loadGeneration) return;
+    if (!mounted || myGen != _loadGeneration) return;
     setState(() {
       _isLoading = false;
       _hasError = true;
     });
-  }
-
-  /// Render หน้า PDF เป็น PNG bytes — return null ถ้าล้มเหลว
-  Future<Uint8List?> _renderThumbnail() async {
-    pdfrx.PdfDocument? document;
-    try {
-      document = await pdfrx.PdfDocument.openFile(widget.filePath);
-      final page = document.pages[widget.pageNumber - 1];
-
-      const double dpi = 96.0;
-      final double scale = dpi / 72.0;
-      final int imgW = (page.width * scale).round().clamp(1, 4096);
-      final int imgH = (page.height * scale).round().clamp(1, 4096);
-
-      final pdfrx.PdfImage? pageImage = await page.render(
-        fullWidth: imgW.toDouble(),
-        fullHeight: imgH.toDouble(),
-      );
-
-      if (pageImage == null) return null;
-
-      // แปลง raw pixels → PNG
-      final ui.ImmutableBuffer buffer =
-          await ui.ImmutableBuffer.fromUint8List(pageImage.pixels);
-      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
-        buffer,
-        width: pageImage.width,
-        height: pageImage.height,
-        pixelFormat: ui.PixelFormat.rgba8888,
-      );
-      final ui.Codec codec = await descriptor.instantiateCodec();
-      final ui.FrameInfo frameInfo = await codec.getNextFrame();
-      final ByteData? byteData =
-          await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
-      frameInfo.image.dispose();
-
-      if (byteData == null) return null;
-
-      final Uint8List pngBytes = byteData.buffer.asUint8List();
-
-      // หมุนถ้าจำเป็น
-      return await _rotateImage(pngBytes, widget.rotation);
-    } finally {
-      document?.dispose();
-    }
-  }
-
-  Future<Uint8List> _rotateImage(Uint8List src, int rotation) async {
-    if (rotation == 0) return src;
-
-    final ui.Codec codec = await ui.instantiateImageCodec(src);
-    final ui.FrameInfo frame = await codec.getNextFrame();
-    final ui.Image img = frame.image;
-
-    final int w = img.width;
-    final int h = img.height;
-
-    late int canvasW;
-    late int canvasH;
-
-    if (rotation == 90 || rotation == 270) {
-      canvasW = h;
-      canvasH = w;
-    } else {
-      canvasW = w;
-      canvasH = h;
-    }
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    canvas.translate(canvasW / 2, canvasH / 2);
-    canvas.rotate(rotation * 3.141592653589793 / 180.0);
-    canvas.translate(-w / 2, -h / 2);
-    canvas.drawImage(img, Offset.zero, Paint());
-
-    final ui.Picture picture = recorder.endRecording();
-    final ui.Image rotated = await picture.toImage(canvasW, canvasH);
-    final ByteData? byteData =
-        await rotated.toByteData(format: ui.ImageByteFormat.png);
-
-    img.dispose();
-    rotated.dispose();
-
-    return byteData!.buffer.asUint8List();
   }
 
   @override
@@ -1133,72 +1009,56 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
       return SizedBox(
         height: 160,
         child: Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
+            child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2))),
       );
     }
 
-    // แสดงปุ่ม retry เมื่อ error
     if (_hasError || _imageBytes == null) {
       return SizedBox(
         height: 160,
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
-              SizedBox(height: 8),
-              GestureDetector(
-                onTap: () {
-                  _loadGeneration++;
-                  _loadThumbnail();
-                },
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh, size: 14, color: Colors.blue),
-                      SizedBox(width: 4),
-                      Text(
-                        'ລອງໃໝ່',
-                        style: TextStyle(fontSize: 11, color: Colors.blue),
-                      ),
-                    ],
-                  ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
+            SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                _loadGeneration++;
+                _startLoad();
+              },
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue.shade200),
                 ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.refresh, size: 14, color: Colors.blue),
+                  SizedBox(width: 4),
+                  Text('ລອງໃໝ່',
+                      style: TextStyle(fontSize: 11, color: Colors.blue)),
+                ]),
               ),
-            ],
-          ),
+            ),
+          ]),
         ),
       );
     }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(2),
-      child: Image.memory(
-        _imageBytes!,
-        width: double.infinity,
-        fit: BoxFit.fitWidth,
-        gaplessPlayback: true,
-      ),
+      child: Image.memory(_imageBytes!,
+          width: double.infinity, fit: BoxFit.fitWidth, gaplessPlayback: true),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SinglePagePreview Widget
+// SinglePagePreview
 // ─────────────────────────────────────────────────────────────────────────────
-
 class SinglePagePreview extends StatelessWidget {
   final PageInfo pageInfo;
   final int pageIndex;
@@ -1225,70 +1085,52 @@ class SinglePagePreview extends StatelessWidget {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator());
         }
-        Size pageSize = snapshot.data!;
+        Size ps = snapshot.data!;
+        double fw = rotation == 90 || rotation == 270 ? ps.height : ps.width;
+        double fh = rotation == 90 || rotation == 270 ? ps.width : ps.height;
 
-        double finalWidth = pageSize.width;
-        double finalHeight = pageSize.height;
-        if (rotation == 90 || rotation == 270) {
-          finalWidth = pageSize.height;
-          finalHeight = pageSize.width;
-        }
-
-        double aspectRatio = finalWidth / finalHeight;
         return Padding(
           padding: EdgeInsets.all(20),
           child: Container(
             decoration: BoxDecoration(
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: Offset(0, 4))
               ],
               border: Border.all(color: Colors.blue, width: 3),
             ),
             child: AspectRatio(
-              aspectRatio: aspectRatio,
+              aspectRatio: fw / fh,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4)),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: SizedBox(
-                            width: finalWidth,
-                            height: finalHeight,
-                            child: OptimizedPdfPreview(
-                              filePath: pageInfo.filePath,
-                              pageNumber: pageInfo.pageNumber,
-                              rotation: rotation,
-                            ),
+                  child: Stack(children: [
+                    Positioned.fill(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: SizedBox(
+                          width: fw,
+                          height: fh,
+                          child: OptimizedPdfPreview(
+                            filePath: pageInfo.filePath,
+                            pageNumber: pageInfo.pageNumber,
+                            rotation: rotation,
                           ),
                         ),
                       ),
-                      ...signatures.asMap().entries.map((entry) {
-                        int sigIndex = entry.key;
-                        SignatureInfo sig = entry.value;
-                        return SignatureOverlay(
-                          signature: sig,
+                    ),
+                    ...signatures.asMap().entries.map((e) => SignatureOverlay(
+                          signature: e.value,
                           rotation: rotation,
-                          onUpdate: (updatedSignature) {
-                            onSignatureUpdate(sigIndex, updatedSignature);
-                          },
-                          onDelete: () {
-                            onSignatureDelete(sigIndex);
-                          },
-                        );
-                      }).toList(),
-                    ],
-                  ),
+                          onUpdate: (s) => onSignatureUpdate(e.key, s),
+                          onDelete: () => onSignatureDelete(e.key),
+                        )),
+                  ]),
                 ),
               ),
             ),
@@ -1300,17 +1142,16 @@ class SinglePagePreview extends StatelessWidget {
 
   Future<Size> _getPageSize(String filePath, int pageNumber) async {
     final bytes = await File(filePath).readAsBytes();
-    PdfDocument doc = PdfDocument(inputBytes: bytes);
-    Size size = doc.pages[pageNumber - 1].size;
+    final doc = PdfDocument(inputBytes: bytes);
+    final size = doc.pages[pageNumber - 1].size;
     doc.dispose();
     return size;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OptimizedPdfPreview Widget
+// OptimizedPdfPreview
 // ─────────────────────────────────────────────────────────────────────────────
-
 class OptimizedPdfPreview extends StatefulWidget {
   final String filePath;
   final int pageNumber;
@@ -1359,33 +1200,34 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
   Widget build(BuildContext context) {
     if (_controller == null) return Center(child: CircularProgressIndicator());
 
-    Widget pdfViewer = SfPdfViewer.file(
-      File(widget.filePath),
-      controller: _controller!,
-      key: ValueKey(
-          'preview_${widget.filePath}_${widget.pageNumber}_${widget.rotation}'),
-      enableDoubleTapZooming: false,
-      enableTextSelection: false,
-      canShowScrollHead: false,
-      canShowScrollStatus: false,
-      pageLayoutMode: PdfPageLayoutMode.single,
-      interactionMode: PdfInteractionMode.pan,
-      scrollDirection: PdfScrollDirection.vertical,
-      onPageChanged: (PdfPageChangedDetails details) {
-        if (!_isDisposed &&
-            details.newPageNumber != widget.pageNumber &&
-            mounted) {
-          Future.microtask(() {
-            if (!_isDisposed && _controller != null && mounted) {
-              _controller!.jumpToPage(widget.pageNumber);
-            }
-          });
-        }
-      },
-    );
-
     return ClipRect(
-      child: RotatedBox(quarterTurns: widget.rotation ~/ 90, child: pdfViewer),
+      child: RotatedBox(
+        quarterTurns: widget.rotation ~/ 90,
+        child: SfPdfViewer.file(
+          File(widget.filePath),
+          controller: _controller!,
+          key: ValueKey(
+              'preview_${widget.filePath}_${widget.pageNumber}_${widget.rotation}'),
+          enableDoubleTapZooming: false,
+          enableTextSelection: false,
+          canShowScrollHead: false,
+          canShowScrollStatus: false,
+          pageLayoutMode: PdfPageLayoutMode.single,
+          interactionMode: PdfInteractionMode.pan,
+          scrollDirection: PdfScrollDirection.vertical,
+          onPageChanged: (PdfPageChangedDetails details) {
+            if (!_isDisposed &&
+                details.newPageNumber != widget.pageNumber &&
+                mounted) {
+              Future.microtask(() {
+                if (!_isDisposed && _controller != null && mounted) {
+                  _controller!.jumpToPage(widget.pageNumber);
+                }
+              });
+            }
+          },
+        ),
+      ),
     );
   }
 
@@ -1399,9 +1241,8 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SignatureOverlay Widget
+// SignatureOverlay
 // ─────────────────────────────────────────────────────────────────────────────
-
 class SignatureOverlay extends StatefulWidget {
   final SignatureInfo signature;
   final int rotation;
@@ -1421,10 +1262,7 @@ class SignatureOverlay extends StatefulWidget {
 }
 
 class _SignatureOverlayState extends State<SignatureOverlay> {
-  late double left;
-  late double top;
-  late double width;
-  late double height;
+  late double left, top, width, height;
   double? imageAspectRatio;
 
   @override
@@ -1434,7 +1272,7 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
     top = widget.signature.top;
     width = widget.signature.width;
     height = widget.signature.height;
-    _loadImageAspectRatio();
+    _loadAspectRatio();
   }
 
   @override
@@ -1451,211 +1289,157 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
         width = widget.signature.width;
         height = widget.signature.height;
       });
-      _loadImageAspectRatio();
+      _loadAspectRatio();
     }
   }
 
-  Future<void> _loadImageAspectRatio() async {
+  Future<void> _loadAspectRatio() async {
     final image = await decodeImageFromList(widget.signature.imageBytes);
-    if (mounted) {
-      setState(() {
-        imageAspectRatio = image.width / image.height;
-      });
-    }
+    if (mounted) setState(() => imageAspectRatio = image.width / image.height);
     image.dispose();
   }
 
-  void _updateSignature() {
-    widget.onUpdate(
-      SignatureInfo(
+  void _push() => widget.onUpdate(SignatureInfo(
         imageBytes: widget.signature.imageBytes,
-        left: left,
-        top: top,
-        width: width,
-        height: height,
+        left: left, top: top, width: width, height: height,
         pageIndex: widget.signature.pageIndex,
-      ),
-    );
-  }
+      ));
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Stack(
-          children: [
-            Positioned(
-              left: left * constraints.maxWidth,
-              top: top * constraints.maxHeight,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  setState(() {
-                    left += details.delta.dx / constraints.maxWidth;
-                    top += details.delta.dy / constraints.maxHeight;
-                    left = left.clamp(0.0, 1.0 - width);
-                    top = top.clamp(0.0, 1.0 - height);
-                  });
-                  _updateSignature();
-                },
-                child: Container(
-                  width: width * constraints.maxWidth,
-                  height: height * constraints.maxHeight,
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: Colors.blue.shade500, width: 2.5),
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withOpacity(0.15),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: Image.memory(
-                            widget.signature.imageBytes,
-                            fit: BoxFit.fill,
-                            width: double.infinity,
-                            height: double.infinity,
-                            gaplessPlayback: true,
-                          ),
-                        ),
-                      ),
-                      _corner(top: -1, left: -1),
-                      _corner(top: -1, right: -1),
-                      _corner(bottom: -1, left: -1),
-                      Positioned(
-                        bottom: -1,
-                        right: -1,
-                        child: GestureDetector(
-                          onPanUpdate: (details) {
-                            setState(() {
-                              double deltaHeight =
-                                  details.delta.dy / constraints.maxHeight;
-                              if (imageAspectRatio != null) {
-                                double deltaWidth =
-                                    deltaHeight * imageAspectRatio!;
-                                width += deltaWidth;
-                                height += deltaHeight;
-                                width = width.clamp(0.03, 1.0 - left);
-                                height = height.clamp(0.03, 1.0 - top);
-                              }
-                            });
-                            _updateSignature();
-                          },
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade500,
-                              border:
-                                  Border.all(color: Colors.white, width: 2),
-                              borderRadius: BorderRadius.circular(2),
-                              boxShadow: [
-                                BoxShadow(
-                                    color: Colors.black26, blurRadius: 4),
-                              ],
-                            ),
-                            child: Icon(Icons.unfold_more,
-                                size: 14, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: -14,
-                        right: -14,
-                        child: GestureDetector(
-                          onTap: widget.onDelete,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.blue.shade400,
-                                  Colors.blue.shade600
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.blue.withOpacity(0.4),
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.close_rounded,
-                                    size: 14, color: Colors.white),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Remove',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+    return LayoutBuilder(builder: (ctx, constraints) {
+      return Stack(children: [
+        Positioned(
+          left: left * constraints.maxWidth,
+          top: top * constraints.maxHeight,
+          child: GestureDetector(
+            onPanUpdate: (d) {
+              setState(() {
+                left = (left + d.delta.dx / constraints.maxWidth)
+                    .clamp(0.0, 1.0 - width);
+                top = (top + d.delta.dy / constraints.maxHeight)
+                    .clamp(0.0, 1.0 - height);
+              });
+              _push();
+            },
+            child: SizedBox(
+              width: width * constraints.maxWidth,
+              height: height * constraints.maxHeight,
+              child: Stack(children: [
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.blue.shade500, width: 2.5),
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.blue.withOpacity(0.15),
+                          blurRadius: 8,
+                          spreadRadius: 1)
                     ],
                   ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: Image.memory(widget.signature.imageBytes,
+                        fit: BoxFit.fill,
+                        width: double.infinity,
+                        height: double.infinity,
+                        gaplessPlayback: true),
+                  ),
                 ),
-              ),
+                _corner(top: -1, left: -1),
+                _corner(top: -1, right: -1),
+                _corner(bottom: -1, left: -1),
+                Positioned(
+                  bottom: -1, right: -1,
+                  child: GestureDetector(
+                    onPanUpdate: (d) {
+                      setState(() {
+                        if (imageAspectRatio != null) {
+                          final dh = d.delta.dy / constraints.maxHeight;
+                          width = (width + dh * imageAspectRatio!)
+                              .clamp(0.03, 1.0 - left);
+                          height = (height + dh).clamp(0.03, 1.0 - top);
+                        }
+                      });
+                      _push();
+                    },
+                    child: Container(
+                      width: 20, height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade500,
+                        border: Border.all(color: Colors.white, width: 2),
+                        borderRadius: BorderRadius.circular(2),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black26, blurRadius: 4)
+                        ],
+                      ),
+                      child: Icon(Icons.unfold_more, size: 14, color: Colors.white),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: -14, right: -14,
+                  child: GestureDetector(
+                    onTap: widget.onDelete,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.blue.shade400, Colors.blue.shade600],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.blue.withOpacity(0.4),
+                              blurRadius: 6,
+                              offset: Offset(0, 2))
+                        ],
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Remove',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ]),
             ),
-          ],
-        );
-      },
-    );
+          ),
+        ),
+      ]);
+    });
   }
 
-  Widget _corner({double? top, double? bottom, double? left, double? right}) {
-    return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Colors.blue.shade500, width: 2),
-          borderRadius: BorderRadius.circular(2),
+  Widget _corner({double? top, double? bottom, double? left, double? right}) =>
+      Positioned(
+        top: top, bottom: bottom, left: left, right: right,
+        child: Container(
+          width: 12, height: 12,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.blue.shade500, width: 2),
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
-      ),
-    );
-  }
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data Classes
 // ─────────────────────────────────────────────────────────────────────────────
-
 class PdfFileInfo {
   final String filePath;
   final String fileName;
   final int pageCount;
-
-  PdfFileInfo({
-    required this.filePath,
-    required this.fileName,
-    required this.pageCount,
-  });
+  PdfFileInfo({required this.filePath, required this.fileName, required this.pageCount});
 }
 
 class PageInfo {
@@ -1663,29 +1447,12 @@ class PageInfo {
   final String fileName;
   final int pageNumber;
   final int totalPages;
-
-  PageInfo({
-    required this.filePath,
-    required this.fileName,
-    required this.pageNumber,
-    required this.totalPages,
-  });
+  PageInfo({required this.filePath, required this.fileName, required this.pageNumber, required this.totalPages});
 }
 
 class SignatureInfo {
   final Uint8List imageBytes;
-  final double left;
-  final double top;
-  final double width;
-  final double height;
+  final double left, top, width, height;
   final int pageIndex;
-
-  SignatureInfo({
-    required this.imageBytes,
-    required this.left,
-    required this.top,
-    required this.width,
-    required this.height,
-    required this.pageIndex,
-  });
+  SignatureInfo({required this.imageBytes, required this.left, required this.top, required this.width, required this.height, required this.pageIndex});
 }

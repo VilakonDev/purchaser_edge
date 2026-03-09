@@ -2,16 +2,22 @@ import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 
+class FileEntry {
+  final File file;
+  final String id; // unique เช่น timestamp หรือ uuid
+
+  FileEntry(this.file) : id = DateTime.now().millisecondsSinceEpoch.toString();
+}
+
 class FileProvider extends ChangeNotifier {
-  List<File> _files = [];
+  List<FileEntry> _files = [];
 
-  List<File> get files => _files;
+  List<FileEntry> get files => _files;
 
-  void addFile(List<File> newFile) {
-    _files.addAll(newFile);
+  void addFile(List<File> newFiles) {
+    _files.addAll(newFiles.map((f) => FileEntry(f)));
     notifyListeners();
   }
-
 
   void deleteFile(int index) {
     _files.removeAt(index);
@@ -20,7 +26,6 @@ class FileProvider extends ChangeNotifier {
 
   void clearFile() {
     _files.clear();
-
     notifyListeners();
   }
 

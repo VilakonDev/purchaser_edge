@@ -315,9 +315,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         children: [
                           GestureDetector(
                             onTap: () {
-                              if (mounted) {
-                                Navigator.pop(context);
-                              }
+                              Future.microtask(
+                                () => mounted ? Navigator.pop(context) : null,
+                              );
                             },
                             child: Container(
                               height: 40,
@@ -345,9 +345,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                 role.toString(),
                               );
 
-                              if(mounted) {
-                                Navigator.pop(context);
-                              }
+                              Future.microtask(
+                                () => mounted ? Navigator.pop(context) : null,
+                              );
                             },
                             child: Container(
                               height: 40,

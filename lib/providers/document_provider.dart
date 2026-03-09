@@ -58,9 +58,9 @@ class DocumentProvider extends ChangeNotifier {
 
   Timer? timer;
 
-  void startAutoFetchDocument() {
-    timer = Timer.periodic(Duration(seconds: 10), (timer) {
-      getAllDocument();
+  void startAutoFetchDocument(String role) {
+    timer = Timer.periodic(Duration(seconds: 3), (timer) {
+      getAllDocument(role);
 
       notifyListeners();
     });
@@ -70,9 +70,9 @@ class DocumentProvider extends ChangeNotifier {
 
   List<DocumentModel> get documents => _documents;
 
-  Future getAllDocument() async {
+  Future getAllDocument(String role) async {
     final response = await http.get(
-      Uri.parse('http://localhost:5000/documents/getAllDocument'),
+      Uri.parse('http://192.168.1.181:5000/documents/getAllDocument'),
     );
 
     if (response.statusCode == 200) {
@@ -80,7 +80,20 @@ class DocumentProvider extends ChangeNotifier {
 
       _documents = data.map((e) => DocumentModel.fromJson(e)).toList();
 
+      
+
       notifyListeners();
+
+
     }
   }
+
+  List<DocumentModel> get pendingDocument =>
+      _documents.where((doc) => doc.status == "PENDING").toList();
+
+  List<DocumentModel> get dmApprovedDocument =>
+      _documents.where((doc) => doc.status == "DM_APPROVED").toList();
+
+  List<DocumentModel> get directorApproved =>
+      _documents.where((doc) => doc.status == "DIRECTOR_APPROVED").toList();
 }

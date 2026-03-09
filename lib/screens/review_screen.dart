@@ -11,7 +11,6 @@ import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
-import 'package:purchaser_edge/utils/pdf_thumbnail_cache.dart';
 import 'package:unicons/unicons.dart';
 
 class ReviewScreen extends StatelessWidget {
@@ -20,64 +19,92 @@ class ReviewScreen extends StatelessWidget {
   const ReviewScreen({super.key, required this.documentData});
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Merge ทุกหน้า (rotation + signature) ออกมาเป็น Uint8List
+  // ✅ _buildMergedPdf
+  // Fast path  : ไม่มี rotate+sig → extract page โดยตรง (font ไม่หาย)
+  // Slow path  : มี rotate หรือ sig → drawPdfTemplate เหมือนเดิม
   // ─────────────────────────────────────────────────────────────────────────
   Future<Uint8List> _buildMergedPdf() async {
     final pages = documentData.pages;
     final rotations = documentData.pageRotations;
     final signatures = documentData.pageSignatures;
 
-    List<Uint8List> pageBytesList = [];
+    final Map<String, Uint8List> fileCache = {};
+    final List<Uint8List> pageBytesList = [];
 
     for (int i = 0; i < pages.length; i++) {
       final pageInfo = pages[i];
-      final bytes = await File(pageInfo.filePath).readAsBytes();
-      final loadedDoc = PdfDocument(inputBytes: bytes);
-      final sourcePage = loadedDoc.pages[pageInfo.pageNumber - 1];
-      final Size orig = sourcePage.size;
       final int rot = rotations[i] ?? 0;
+      final List<SignatureInfo> sigs = signatures[i] ?? [];
+      final bool needsRotate = rot != 0;
+      final bool hasSigs = sigs.isNotEmpty;
 
-      final bool needsSwap = rot == 90 || rot == 270;
-      final double rW = needsSwap ? orig.height : orig.width;
-      final double rH = needsSwap ? orig.width : orig.height;
+      fileCache[pageInfo.filePath] ??= await File(
+        pageInfo.filePath,
+      ).readAsBytes();
+      final Uint8List srcBytes = fileCache[pageInfo.filePath]!;
 
-      final PdfDocument singleDoc = PdfDocument();
-      singleDoc.pageSettings.margins.all = 0;
-      singleDoc.pageSettings.size = Size(rW, rH);
-      singleDoc.pageSettings.orientation = rW > rH
-          ? PdfPageOrientation.landscape
-          : PdfPageOrientation.portrait;
+      if (!needsRotate && !hasSigs) {
+        // ── Fast path ──────────────────────────────────────────────────────
+        // โหลด full doc แล้วลบหน้าที่ไม่ต้องการออก → font resources ยังอยู่
+        final PdfDocument fullDoc = PdfDocument(inputBytes: srcBytes);
+        final int total = fullDoc.pages.count;
 
-      final PdfPage newPage = singleDoc.pages.add();
-      final Size a = newPage.size;
-      final PdfTemplate tmpl = sourcePage.createTemplate();
-      newPage.graphics.save();
+        // ลบจากท้ายไปหน้า เพื่อไม่ให้ index เลื่อน
+        for (int p = total - 1; p >= 0; p--) {
+          if (p != pageInfo.pageNumber - 1) {
+            fullDoc.pages.removeAt(p);
+          }
+        }
 
-      switch (rot) {
-        case 0:
-          newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
-          break;
-        case 90:
-          newPage.graphics.translateTransform(a.width, 0);
-          newPage.graphics.rotateTransform(90);
-          newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
-          break;
-        case 180:
-          newPage.graphics.translateTransform(a.width, a.height);
-          newPage.graphics.rotateTransform(180);
-          newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
-          break;
-        case 270:
-          newPage.graphics.translateTransform(0, a.height);
-          newPage.graphics.rotateTransform(-90);
-          newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
-          break;
-      }
-      newPage.graphics.restore();
+        final List<int> extracted = await fullDoc.save();
+        pageBytesList.add(Uint8List.fromList(extracted));
+        fullDoc.dispose();
+      } else {
+        // ── Slow path ──────────────────────────────────────────────────────
+        // ต้อง rotate หรือวาง signature → ใช้ drawPdfTemplate
+        final PdfDocument loadedDoc = PdfDocument(inputBytes: srcBytes);
+        final PdfPage sourcePage = loadedDoc.pages[pageInfo.pageNumber - 1];
+        final Size orig = sourcePage.size;
 
-      // วาง signatures
-      if (signatures.containsKey(i)) {
-        for (final SignatureInfo sig in signatures[i]!) {
+        final bool needsSwap = rot == 90 || rot == 270;
+        final double rW = needsSwap ? orig.height : orig.width;
+        final double rH = needsSwap ? orig.width : orig.height;
+
+        final PdfDocument singleDoc = PdfDocument();
+        singleDoc.pageSettings.margins.all = 0;
+        singleDoc.pageSettings.size = Size(rW, rH);
+        singleDoc.pageSettings.orientation = rW > rH
+            ? PdfPageOrientation.landscape
+            : PdfPageOrientation.portrait;
+
+        final PdfPage newPage = singleDoc.pages.add();
+        final Size a = newPage.size;
+        final PdfTemplate tmpl = sourcePage.createTemplate();
+        newPage.graphics.save();
+
+        switch (rot) {
+          case 0:
+            newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
+            break;
+          case 90:
+            newPage.graphics.translateTransform(a.width, 0);
+            newPage.graphics.rotateTransform(90);
+            newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
+            break;
+          case 180:
+            newPage.graphics.translateTransform(a.width, a.height);
+            newPage.graphics.rotateTransform(180);
+            newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
+            break;
+          case 270:
+            newPage.graphics.translateTransform(0, a.height);
+            newPage.graphics.rotateTransform(-90);
+            newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
+            break;
+        }
+        newPage.graphics.restore();
+
+        for (final SignatureInfo sig in sigs) {
           final bool wasFlipped = (a.width - rW).abs() > 1.0;
           double sl, st, sw, sh;
           if (!wasFlipped) {
@@ -91,45 +118,40 @@ class ReviewScreen extends StatelessWidget {
             sw = sig.height * a.width;
             sh = sig.width * a.height;
           }
-          final PdfBitmap bmp = PdfBitmap(sig.imageBytes);
-          newPage.graphics.drawImage(bmp, Rect.fromLTWH(sl, st, sw, sh));
+          newPage.graphics.drawImage(
+            PdfBitmap(sig.imageBytes),
+            Rect.fromLTWH(sl, st, sw, sh),
+          );
         }
-      }
 
-      final singleBytes = await singleDoc.save();
-      pageBytesList.add(Uint8List.fromList(singleBytes));
-      singleDoc.dispose();
-      loadedDoc.dispose();
+        final List<int> singleBytes = await singleDoc.save();
+        pageBytesList.add(Uint8List.fromList(singleBytes));
+        singleDoc.dispose();
+        loadedDoc.dispose();
+      }
     }
 
     if (pageBytesList.isEmpty) return Uint8List(0);
     if (pageBytesList.length == 1) return pageBytesList.first;
 
+    // ✅ merge โดยใช้ addPage loop — ใช้ได้ทุก Syncfusion version
     final PdfDocument mergedDoc = PdfDocument();
-    for (int i = 0; i < pageBytesList.length; i++) {
-      final PdfDocument srcDoc = PdfDocument(inputBytes: pageBytesList[i]);
+    mergedDoc.pageSettings.margins.all = 0;
+
+    for (final Uint8List pb in pageBytesList) {
+      final PdfDocument srcDoc = PdfDocument(inputBytes: pb);
       final PdfPage srcPage = srcDoc.pages[0];
       final Size srcSize = srcPage.size;
 
-      mergedDoc.pageSettings.margins.all = 0;
       mergedDoc.pageSettings.size = srcSize;
       mergedDoc.pageSettings.orientation = srcSize.width > srcSize.height
           ? PdfPageOrientation.landscape
           : PdfPageOrientation.portrait;
 
       final PdfPage destPage = mergedDoc.pages.add();
-      final Size da = destPage.size;
       final PdfTemplate srcTmpl = srcPage.createTemplate();
+      destPage.graphics.drawPdfTemplate(srcTmpl, Offset.zero, srcSize);
 
-      if ((da.width - srcSize.width).abs() < 1.0) {
-        destPage.graphics.drawPdfTemplate(srcTmpl, Offset.zero, srcSize);
-      } else {
-        destPage.graphics.save();
-        destPage.graphics.translateTransform(da.width, 0);
-        destPage.graphics.rotateTransform(90);
-        destPage.graphics.drawPdfTemplate(srcTmpl, Offset.zero, srcSize);
-        destPage.graphics.restore();
-      }
       srcDoc.dispose();
     }
 
@@ -139,10 +161,9 @@ class ReviewScreen extends StatelessWidget {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // แสดง Dialog กรอกข้อมูล แล้วส่ง API
+  // Upload document
   // ─────────────────────────────────────────────────────────────────────────
   Future<void> _uploadDocument(BuildContext context) async {
-    // แสดง loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -153,7 +174,7 @@ class ReviewScreen extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Padding(
+          child: const Padding(
             padding: EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -172,21 +193,17 @@ class ReviewScreen extends StatelessWidget {
     );
 
     try {
-      // Merge PDF
       final pdfBytes = await _buildMergedPdf();
 
-      // บันทึกไฟล์ temp
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
         '${tempDir.path}/upload_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );
       await tempFile.writeAsBytes(pdfBytes);
 
-      // สร้าง multipart request
-      final uri = Uri.parse('http://localhost:5000/documents/upload');
+      final uri = Uri.parse('http://192.168.1.181:5000/documents/upload');
       final request = http.MultipartRequest('POST', uri);
 
-      // Form fields
       request.fields['document_number'] =
           context.read<DocumentProvider>().documentNumber ?? '';
       request.fields['document_title'] =
@@ -198,7 +215,6 @@ class ReviewScreen extends StatelessWidget {
       request.fields['created_by'] =
           context.read<DocumentProvider>().createBy ?? '';
 
-      // PDF file
       request.files.add(
         await http.MultipartFile.fromPath(
           'file',
@@ -211,14 +227,11 @@ class ReviewScreen extends StatelessWidget {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
-      // ลบ temp file
       await tempFile.delete();
 
-      // ปิด loading
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 
       if (response.statusCode == 200) {
-        // สำเร็จ
         if (context.mounted) {
           context.read<FileProvider>().clearFile();
           context.read<DocumentProvider>().resetDocumentInfo();
@@ -231,7 +244,7 @@ class ReviewScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -242,21 +255,21 @@ class ReviewScreen extends StatelessWidget {
                         color: Colors.green.shade50,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.check_rounded,
                         color: Colors.green,
                         size: 36,
                       ),
                     ),
-                    SizedBox(height: 16),
-                    Text(
+                    const SizedBox(height: 16),
+                    const Text(
                       'ສົ່ງເອກະສານສຳເລັດ!',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 24),
+                    const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -265,17 +278,15 @@ class ReviewScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          padding: EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         onPressed: () {
-                          // ปิด success dialog
                           Navigator.of(context, rootNavigator: true).pop();
-                          // กลับไป 2 หน้า (ReviewScreen + PdfViewerScreen)
                           Navigator.of(context)
                             ..pop()
                             ..pop();
                         },
-                        child: Text(
+                        child: const Text(
                           'ກັບສູ່ໜ້າຫຼັກ',
                           style: TextStyle(color: Colors.white, fontSize: 15),
                         ),
@@ -288,7 +299,6 @@ class ReviewScreen extends StatelessWidget {
           );
         }
       } else {
-        // Error จาก server
         if (context.mounted) {
           _showErrorDialog(
             context,
@@ -297,7 +307,6 @@ class ReviewScreen extends StatelessWidget {
         }
       }
     } catch (e) {
-      // ปิด loading ก่อน
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
       if (context.mounted) {
         _showErrorDialog(context, 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
@@ -312,7 +321,7 @@ class ReviewScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -323,20 +332,24 @@ class ReviewScreen extends StatelessWidget {
                   color: Colors.red.shade50,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.error_outline, color: Colors.red, size: 36),
+                child: const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 36,
+                ),
               ),
-              SizedBox(height: 16),
-              Text(
+              const SizedBox(height: 16),
+              const Text(
                 'ເກີດຂໍ້ຜິດພາດ',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 message,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -345,11 +358,11 @@ class ReviewScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    padding: EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   onPressed: () =>
                       Navigator.of(context, rootNavigator: true).pop(),
-                  child: Text(
+                  child: const Text(
                     'ປິດ',
                     style: TextStyle(color: Colors.white, fontSize: 15),
                   ),
@@ -378,23 +391,23 @@ class ReviewScreen extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: ColorService().mainGredientColor,
             ),
-            padding: EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     height: 40,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
-                      spacing: 10,
                       children: [
-                        Icon(UniconsLine.arrow_left),
+                        const Icon(UniconsLine.arrow_left),
+                        const SizedBox(width: 10),
                         Text(
                           'ກັບຄືນ',
                           style: TextStyle(color: ColorService().mainTextColor),
@@ -403,7 +416,7 @@ class ReviewScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
+                const Text(
                   'ກວດສອບເອກະສານກ່ອນສົ່ງ',
                   style: TextStyle(
                     color: Colors.white,
@@ -411,23 +424,22 @@ class ReviewScreen extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                // ===== ปุ่มส่งเอกสาร =====
                 GestureDetector(
                   onTap: () => _uploadDocument(context),
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     height: 40,
                     decoration: BoxDecoration(
                       color: ColorService().successColor,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(
-                      spacing: 10,
+                    child: const Row(
                       children: [
                         Text(
                           'ສົ່ງເອກະສານ',
                           style: TextStyle(color: Colors.white),
                         ),
+                        SizedBox(width: 10),
                         Icon(UniconsLine.sign_out_alt, color: Colors.white),
                       ],
                     ),
@@ -449,8 +461,8 @@ class ReviewScreen extends StatelessWidget {
                           size: 80,
                           color: Colors.grey.shade300,
                         ),
-                        SizedBox(height: 16),
-                        Text(
+                        const SizedBox(height: 16),
+                        const Text(
                           'ບໍ່ມີເອກະສານສຳລັບກວດສອບ',
                           style: TextStyle(color: Colors.grey, fontSize: 16),
                         ),
@@ -460,7 +472,7 @@ class ReviewScreen extends StatelessWidget {
                 : Container(
                     color: Colors.grey.shade200,
                     child: ListView.builder(
-                      padding: EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                         vertical: 16,
                         horizontal: 200,
                       ),
@@ -487,11 +499,7 @@ class ReviewScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _UploadDialog — form กรอกข้อมูลก่อนส่ง
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _ReviewPageItem — one card per page
+// _ReviewPageItem
 // ─────────────────────────────────────────────────────────────────────────────
 class _ReviewPageItem extends StatelessWidget {
   final int index;
@@ -517,12 +525,12 @@ class _ReviewPageItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 32),
+      padding: const EdgeInsets.only(bottom: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Padding(
-            padding: EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               'ໜ້າ ${index + 1}',
               style: TextStyle(
@@ -536,36 +544,26 @@ class _ReviewPageItem extends StatelessWidget {
           FutureBuilder<Size>(
             future: _getPageSize(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return Container(
-                  height: 400,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 8,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              Size pageSize = snapshot.data!;
-              double finalWidth = pageSize.width;
-              double finalHeight = pageSize.height;
-              if (rotation == 90 || rotation == 270) {
-                finalWidth = pageSize.height;
-                finalHeight = pageSize.width;
+              double aspectRatio;
+              if (snapshot.hasData) {
+                final Size pageSize = snapshot.data!;
+                final double finalWidth = (rotation == 90 || rotation == 270)
+                    ? pageSize.height
+                    : pageSize.width;
+                final double finalHeight = (rotation == 90 || rotation == 270)
+                    ? pageSize.width
+                    : pageSize.height;
+                aspectRatio = finalWidth / finalHeight;
+              } else {
+                aspectRatio = (rotation == 90 || rotation == 270)
+                    ? 297 / 210
+                    : 210 / 297;
               }
 
               return Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
                       color: Colors.black26,
                       blurRadius: 10,
@@ -576,11 +574,11 @@ class _ReviewPageItem extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: AspectRatio(
-                    aspectRatio: finalWidth / finalHeight,
+                    aspectRatio: aspectRatio,
                     child: Stack(
                       children: [
                         Positioned.fill(
-                          child: _ReviewPdfPageImage(
+                          child: _ReviewPdfPageViewer(
                             filePath: pageInfo.filePath,
                             pageNumber: pageInfo.pageNumber,
                             rotation: rotation,
@@ -603,127 +601,161 @@ class _ReviewPageItem extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _ReviewPdfPageImage
+// _ReviewPdfPageViewer
+// ✅ ใช้ pdfrx render เป็น PNG — PDFium มี font engine ในตัว
+//    ไม่พึ่ง Windows system font → ไม่เป็น □
 // ─────────────────────────────────────────────────────────────────────────────
-class _ReviewPdfPageImage extends StatefulWidget {
+class _ReviewPdfPageViewer extends StatefulWidget {
   final String filePath;
   final int pageNumber;
   final int rotation;
 
-  const _ReviewPdfPageImage({
+  const _ReviewPdfPageViewer({
     required this.filePath,
     required this.pageNumber,
     required this.rotation,
   });
 
   @override
-  State<_ReviewPdfPageImage> createState() => _ReviewPdfPageImageState();
+  State<_ReviewPdfPageViewer> createState() => _ReviewPdfPageViewerState();
 }
 
-class _ReviewPdfPageImageState extends State<_ReviewPdfPageImage> {
-  Uint8List? _bytes;
+class _ReviewPdfPageViewerState extends State<_ReviewPdfPageViewer> {
+  Uint8List? _imageBytes;
   bool _isLoading = true;
-
-  String get _cacheKey =>
-      'review_hq_${widget.filePath}_${widget.pageNumber}_${widget.rotation}';
+  bool _hasError = false;
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    _render();
+    _renderPage();
   }
 
-  Future<void> _render() async {
+  @override
+  void didUpdateWidget(_ReviewPdfPageViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filePath != widget.filePath ||
+        oldWidget.pageNumber != widget.pageNumber ||
+        oldWidget.rotation != widget.rotation) {
+      _generation++;
+      _renderPage();
+    }
+  }
+
+  Future<void> _renderPage() async {
+    final int myGen = _generation;
     if (!mounted) return;
 
-    if (pdfThumbnailCache.containsKey(_cacheKey)) {
-      if (mounted) {
-        setState(() {
-          _bytes = pdfThumbnailCache[_cacheKey];
-          _isLoading = false;
-        });
-      }
-      return;
-    }
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
+    pdfrx.PdfDocument? doc;
     try {
-      final document = await pdfrx.PdfDocument.openFile(widget.filePath);
-      final page = document.pages[widget.pageNumber - 1];
+      doc = await pdfrx.PdfDocument.openFile(widget.filePath);
+      if (myGen != _generation || !mounted) return;
 
-      const double dpi = 150.0;
-      final double scale = dpi / 72.0;
-      final int imgW = (page.width * scale).round();
-      final int imgH = (page.height * scale).round();
+      final int total = doc.pages.length;
+      if (widget.pageNumber < 1 || widget.pageNumber > total) {
+        throw Exception('page out of range');
+      }
+
+      final page = doc.pages[widget.pageNumber - 1];
+
+      // render ความละเอียดสูง 2400px สำหรับ review
+      const double targetLong = 2400.0;
+      final double scale = page.width >= page.height
+          ? targetLong / page.width
+          : targetLong / page.height;
+      final int imgW = (page.width * scale).round().clamp(1, 2400);
+      final int imgH = (page.height * scale).round().clamp(1, 2400);
 
       final pdfrx.PdfImage? pageImage = await page.render(
         fullWidth: imgW.toDouble(),
         fullHeight: imgH.toDouble(),
       );
-      document.dispose();
 
-      if (pageImage == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+      if (pageImage == null) throw Exception('render returned null');
+      if (myGen != _generation || !mounted) return;
 
-      final buffer = await ui.ImmutableBuffer.fromUint8List(pageImage.pixels);
-      final descriptor = await ui.ImageDescriptor.raw(
+      final Uint8List pixelsCopy = Uint8List.fromList(pageImage.pixels);
+      final int pw = pageImage.width;
+      final int ph = pageImage.height;
+
+      doc.dispose();
+      doc = null;
+
+      // pixels → PNG
+      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
+        pixelsCopy,
+      );
+      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
         buffer,
-        width: pageImage.width,
-        height: pageImage.height,
+        width: pw,
+        height: ph,
         pixelFormat: ui.PixelFormat.rgba8888,
       );
-      final codec = await descriptor.instantiateCodec();
-      final frameInfo = await codec.getNextFrame();
-      final byteData = await frameInfo.image.toByteData(
+      final ui.Codec codec = await descriptor.instantiateCodec();
+      final ui.FrameInfo frameInfo = await codec.getNextFrame();
+      final ByteData? byteData = await frameInfo.image.toByteData(
         format: ui.ImageByteFormat.png,
       );
       frameInfo.image.dispose();
+      codec.dispose();
 
-      if (byteData == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+      if (byteData == null) throw Exception('toByteData failed');
+      if (myGen != _generation || !mounted) return;
 
       Uint8List pngBytes = byteData.buffer.asUint8List();
+
       if (widget.rotation != 0) {
         pngBytes = await _rotateImage(pngBytes, widget.rotation);
       }
 
-      pdfThumbnailCache[_cacheKey] = pngBytes;
-
-      if (mounted) {
-        setState(() {
-          _bytes = pngBytes;
-          _isLoading = false;
-        });
-      }
+      if (myGen != _generation || !mounted) return;
+      setState(() {
+        _imageBytes = pngBytes;
+        _isLoading = false;
+      });
     } catch (e) {
-      debugPrint('ReviewPdfPageImage error: $e');
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('[ReviewPdfPageViewer] error: $e');
+      if (myGen != _generation || !mounted) return;
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
+    } finally {
+      doc?.dispose();
     }
   }
 
   Future<Uint8List> _rotateImage(Uint8List src, int rotation) async {
-    final codec = await ui.instantiateImageCodec(src);
-    final frame = await codec.getNextFrame();
-    final img = frame.image;
-    final w = img.width;
-    final h = img.height;
-    final canvasW = (rotation == 90 || rotation == 270) ? h : w;
-    final canvasH = (rotation == 90 || rotation == 270) ? w : h;
+    final ui.Codec codec = await ui.instantiateImageCodec(src);
+    final ui.FrameInfo frame = await codec.getNextFrame();
+    final ui.Image img = frame.image;
+    codec.dispose();
+
+    final int w = img.width;
+    final int h = img.height;
+    final bool swap = rotation == 90 || rotation == 270;
+    final int cw = swap ? h : w;
+    final int ch = swap ? w : h;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.translate(canvasW / 2, canvasH / 2);
+    canvas.translate(cw / 2, ch / 2);
     canvas.rotate(rotation * 3.141592653589793 / 180.0);
     canvas.translate(-w / 2, -h / 2);
     canvas.drawImage(img, Offset.zero, Paint());
-
-    final picture = recorder.endRecording();
-    final rotated = await picture.toImage(canvasW, canvasH);
-    final bd = await rotated.toByteData(format: ui.ImageByteFormat.png);
     img.dispose();
+
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image rotated = await picture.toImage(cw, ch);
+    final ByteData? bd = await rotated.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
     rotated.dispose();
     return bd!.buffer.asUint8List();
   }
@@ -733,24 +765,67 @@ class _ReviewPdfPageImageState extends State<_ReviewPdfPageImage> {
     if (_isLoading) {
       return Container(
         color: Colors.white,
-        child: Center(child: CircularProgressIndicator()),
+        child: const Center(child: CircularProgressIndicator()),
       );
     }
-    if (_bytes == null) {
+
+    if (_hasError || _imageBytes == null) {
       return Container(
         color: Colors.white,
         child: Center(
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: Colors.grey,
-            size: 48,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.broken_image_outlined,
+                color: Colors.grey.shade400,
+                size: 48,
+              ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () {
+                  _generation++;
+                  _renderPage();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.refresh,
+                        size: 16,
+                        color: Colors.blue.shade600,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'ລອງໃໝ່',
+                        style: TextStyle(
+                          color: Colors.blue.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
+
     return Image.memory(
-      _bytes!,
-      fit: BoxFit.fill,
+      _imageBytes!,
+      fit: BoxFit.contain,
       width: double.infinity,
       height: double.infinity,
       gaplessPlayback: true,

@@ -43,56 +43,54 @@ class _DashBoardPageState extends State<DashBoardPage> {
       child: ListView(
         children: [
           AppBarWidget(label: 'ໜ້າຫຼັກ', widget: Container()),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                spacing: 20,
-                children: [
-                  _buildSummaryCard(),
-                  Row(
-                    spacing: 20,
-                    children: [
-                      _buildPieChart(),
-                      _buildChart(),
-                      _buildNotification(),
-                    ],
-                  ),
-                  Row(
-                    spacing: 20,
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: Container(
-                          height: 400,
-                          padding: EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            spacing: 10,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'ເອກະສານລ່າສຸດ',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: ColorService().mainTextColor,
-                                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              spacing: 20,
+              children: [
+                _buildSummaryCard(),
+                Row(
+                  spacing: 20,
+                  children: [
+                    _buildPieChart(),
+                    _buildChart(),
+                    _buildNotification(),
+                  ],
+                ),
+                Row(
+                  spacing: 20,
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: Container(
+                        height: 400,
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          spacing: 10,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ເອກະສານລ່າສຸດ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: ColorService().mainTextColor,
                               ),
-                              _buildRecentDocument(),
-                            ],
-                          ),
+                            ),
+                            _buildRecentDocument(),
+                          ],
                         ),
                       ),
-                      Expanded(child: Container()),
-                    ],
-                  ),
-                  Container(),
-                ],
-              ),
+                    ),
+                    Expanded(child: Container()),
+                  ],
+                ),
+                Container(),
+              ],
             ),
           ),
         ],
@@ -157,13 +155,14 @@ class _DashBoardPageState extends State<DashBoardPage> {
           SummaryCard(
             ColorService().warningColor,
             'ເອກະສານລໍຖ້າອະນຸມັດ',
-            120,
+            context.watch<DocumentProvider>().pendingDocument.length +
+                context.watch<DocumentProvider>().dmApprovedDocument.length,
             UniconsLine.clock,
           ),
           SummaryCard(
             ColorService().successColor,
             'ເອກະສານອະນຸມັດແລ້ວ',
-            120,
+            context.watch<DocumentProvider>().directorApproved.length,
             UniconsLine.check,
           ),
           SummaryCard(
@@ -210,8 +209,16 @@ class _DashBoardPageState extends State<DashBoardPage> {
               values: [
                 context.watch<DocumentProvider>().documents.length.toDouble(),
 
-                1,
-                1,
+                context
+                    .watch<DocumentProvider>()
+                    .pendingDocument
+                    .length
+                    .toDouble(),
+                context
+                    .watch<DocumentProvider>()
+                    .directorApproved
+                    .length
+                    .toDouble(),
                 2,
               ],
               gapSize: 0.15,

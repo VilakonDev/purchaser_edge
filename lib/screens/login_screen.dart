@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/screens/home_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
+import 'package:purchaser_edge/widgets/alert_dialog_widget.dart';
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:unicons/unicons.dart';
 
@@ -101,9 +102,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 .login(context, username, password);
 
                             if (isLogin) {
-                              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (_) => HomeScreen()),
+                              );
                             } else {
-                              print('Username or passwod incorrect');
+                              showDialog(
+                                context: context,
+                                builder: (_) => AlertDialogWidget(type: "error",textContent:'ຊື່ຜູ້ໃຊ້ ຫຼື ລະຫັດຜ່ານ ບໍ່ຖືກຕ້ອງ',),
+                              );
                             }
                           }
                         },

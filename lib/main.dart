@@ -8,13 +8,12 @@ import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/screens/login_screen.dart';
-
 import 'package:purchaser_edge/screens/sign_license_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   pdfrxFlutterInitialize();
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -32,7 +31,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Purchaser Edge',
         debugShowCheckedModeBanner: false,
-        home: AuthPage(),
+        home: const AuthPage(),
         theme: ThemeData(textTheme: GoogleFonts.notoSansLaoTextTheme()),
       ),
     );
@@ -47,27 +46,42 @@ class AuthPage extends StatefulWidget {
 }
 
 class _AuthPageState extends State<AuthPage> {
+  bool _checked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_checked) {
+      _checked = true;
+      _checkLicense();
+    }
+  }
+
+  Future<void> _checkLicense() async {
+    try {
+      final isValid = await context.read<AuthProvider>().verifyLicense();
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              isValid ? const LoginScreen() : const SignLicenseScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SignLicenseScreen()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: context.read<AuthProvider>().verifyLicense(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        if (snapshot.hasError) {
-          return Scaffold(body: Center(child: Text(snapshot.error.toString())));
-        }
-
-        if (snapshot.data == true) {
-          // license ถูกต้อง → ไป Login
-          return LoginScreen();
-        } else {
-          // license ไม่ถูกต้อง → ไปหน้า SignLicense
-          return SignLicenseScreen();
-        }
-      },
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }

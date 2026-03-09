@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
-
+import 'package:purchaser_edge/screens/approve_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
-import 'package:purchaser_edge/widgets/drop_down_widget.dart';
+
 import 'package:unicons/unicons.dart';
 
-class AllDocumentPage extends StatefulWidget {
-  const AllDocumentPage({super.key});
+class ApproveDocumentPage extends StatefulWidget {
+  const ApproveDocumentPage({super.key});
 
   @override
-  State<AllDocumentPage> createState() => _AllDocumentPageState();
+  State<ApproveDocumentPage> createState() => _ApproveDocumentPageState();
 }
 
-class _AllDocumentPageState extends State<AllDocumentPage> {
+class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
 
@@ -34,7 +34,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
       child: Column(
         children: [
-          AppBarWidget(label: 'ເອກະສານທັງໝົດ', widget: Container()),
+          AppBarWidget(label: 'ອະນຸມັດເອກະສານ', widget: Container()),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -42,7 +42,6 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                 spacing: 20,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSearchBox(),
                   Expanded(
                     child: Scrollbar(
                       controller: _verticalController,
@@ -149,13 +148,45 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                 ],
                                 rows: List.generate(
                                   context
-                                      .watch<DocumentProvider>()
-                                      .documents
-                                      .length,
+                                              .read<AuthProvider>()
+                                              .currentUser!
+                                              .role ==
+                                          "DISTRICT_MANAGER"
+                                      ? context
+                                            .watch<DocumentProvider>()
+                                            .pendingDocument
+                                            .length
+                                      : context
+                                                .read<AuthProvider>()
+                                                .currentUser!
+                                                .role ==
+                                            "DIRECTOR"
+                                      ? context
+                                            .watch<DocumentProvider>()
+                                            .dmApprovedDocument
+                                            .length
+                                      : 0,
                                   (index) {
-                                    final cellData = context
-                                        .watch<DocumentProvider>()
-                                        .documents[index];
+                                    final cellData =
+                                        context
+                                                .read<AuthProvider>()
+                                                .currentUser!
+                                                .role ==
+                                            "DISTRICT_MANAGER"
+                                        ? context
+                                              .watch<DocumentProvider>()
+                                              .pendingDocument[index]
+                                        : context
+                                                  .read<AuthProvider>()
+                                                  .currentUser!
+                                                  .role ==
+                                              "DIRECTOR"
+                                        ? context
+                                              .watch<DocumentProvider>()
+                                              .dmApprovedDocument[index]
+                                        : context
+                                              .watch<DocumentProvider>()
+                                              .documents[index];
 
                                     return DataRow(
                                       cells: [
@@ -231,7 +262,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.filePending}",
+                                                              "http://localhost:5000/uploads/${cellData.filePending}",
                                                             )
                                                       : cellData.status ==
                                                             "DM_APPROVED"
@@ -240,17 +271,72 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.fileDm}",
+                                                              "http://localhost:5000/uploads/${cellData.fileDm}",
                                                             )
                                                       : context
                                                             .read<
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.fileDirector}",
+                                                              "http://localhost:5000/uploads/${cellData.fileDirector}",
                                                             );
                                                 },
                                               ),
+
+                                              context
+                                                          .read<AuthProvider>()
+                                                          .currentUser
+                                                          ?.role ==
+                                                      "DISTRICT_MANAGER"
+                                                  ? _buildActionButton(
+                                                      onPressed: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) => ApproveScreen(
+                                                              fileName: cellData
+                                                                  .filePending,
+                                                              documentId: cellData
+                                                                  .id
+                                                                  .toString(),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                      icon: UniconsLine.check,
+                                                      color: ColorService()
+                                                          .successColor,
+                                                    )
+                                                  : context
+                                                            .read<
+                                                              AuthProvider
+                                                            >()
+                                                            .currentUser!
+                                                            .role ==
+                                                        "DIRECTOR"
+                                                  ? _buildActionButton(
+                                                      onPressed: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                ApproveScreen(
+                                                                  fileName:
+                                                                      cellData
+                                                                          .fileDm,
+                                                                  documentId:
+                                                                      cellData
+                                                                          .id
+                                                                          .toString(),
+                                                                ),
+                                                          ),
+                                                        );
+                                                      },
+                                                      icon: UniconsLine.check,
+                                                      color: ColorService()
+                                                          .successColor,
+                                                    )
+                                                  : Container(),
                                             ],
                                           ),
                                         ),
@@ -289,54 +375,6 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: Colors.white, size: 18),
-      ),
-    );
-  }
-
-  Widget _buildSearchBox() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        spacing: 10,
-        children: [
-          Expanded(
-            child: DropDownWidget(
-              label: 'ກຸ່ມສິນຄ້າ',
-              items: context.read<DocumentProvider>().category,
-            ),
-          ),
-          Expanded(
-            child: DropDownWidget(
-              label: 'ສະຖານະ',
-              items: ['ອະນຸມັດແລ້ວ', 'ລໍຖ້າອະນຸມັດ', 'ເອກະສານຕີກັບ'],
-            ),
-          ),
-          Container(width: 300, height: 40),
-          Column(
-            children: [
-              const SizedBox(height: 25),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                height: 40,
-                decoration: BoxDecoration(
-                  color: ColorService().primaryColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: const [
-                    Text('ຄົ້ນຫາ', style: TextStyle(color: Colors.white)),
-                    Icon(UniconsLine.search, color: Colors.white),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

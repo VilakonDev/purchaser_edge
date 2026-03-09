@@ -135,7 +135,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(p.basename(file.path)),
+                                            Text(p.basename(file.file.path)),
                                             GestureDetector(
                                               onTap: () => context
                                                   .read<FileProvider>()
@@ -156,7 +156,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                       ),
                     ),
                   ),
-                  _buildBottomButton(files),
+                  _buildBottomButton(),
                   Container(),
                 ],
               ),
@@ -241,7 +241,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
     );
   }
 
-  Widget _buildBottomButton(List<File> files) {
+  Widget _buildBottomButton() {
     return Container(
       width: double.infinity,
       height: 50,
