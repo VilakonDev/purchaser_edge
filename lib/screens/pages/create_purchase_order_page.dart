@@ -8,6 +8,7 @@ import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
+import 'package:purchaser_edge/widgets/alert_dialog_widget.dart';
 
 import 'package:purchaser_edge/widgets/text_filed_widget.dart';
 import 'package:purchaser_edge/services/color_service.dart';
@@ -278,24 +279,38 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
               final documentNumber = documentNumberController.text.trim();
               final documentTitle = documentTitleController.text.trim();
 
-              context.read<DocumentProvider>().setDocumentInfo(
-                documentNumber,
-                documentTitle,
-                documentCategory.toString(),
-                context.read<AuthProvider>().currentUser!.branch,
-                context.read<AuthProvider>().currentUser!.fullName,
-              );
+              if (documentNumber.isEmpty || documentTitle.isEmpty) {
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialogWidget(
+                    type: 'error',
+                    textContent: 'ກະລຸນາໃສ່ຂໍ້ມູນໃຫ້ຄົບຖ້ວນ',
+                  ),
+                );
+              } else {
+                context.read<DocumentProvider>().setDocumentInfo(
+                  documentNumber,
+                  documentTitle,
+                  documentCategory.toString(),
+                  context.read<AuthProvider>().currentUser!.branch,
+                  context.read<AuthProvider>().currentUser!.fullName,
+                );
 
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => PdfViewerScreen()),
-              );
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => PdfViewerScreen()),
+                );
+              }
             },
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 20),
               height: 50,
               decoration: BoxDecoration(
-                gradient: ColorService().mainGredientColor,
+                gradient: context.read<FileProvider>().files.length == 0
+                    ? LinearGradient(
+                        colors: [Colors.grey.shade300, Colors.grey.shade300],
+                      )
+                    : ColorService().mainGredientColor,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(

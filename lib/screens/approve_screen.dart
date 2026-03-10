@@ -9,6 +9,7 @@ import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
+import 'package:purchaser_edge/services/url_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
@@ -16,7 +17,6 @@ import 'package:purchaser_edge/utils/pdf_thumbnail_cache.dart';
 import 'package:unicons/unicons.dart';
 
 // Base URL ของ server — ปรับตามจริง
-const String _kBaseUrl = 'http://localhost:5000';
 
 class ApproveScreen extends StatefulWidget {
   /// โหมด 1: เปิดจาก PdfViewerScreen (ส่ง documentData มา)
@@ -95,7 +95,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
     });
 
     try {
-      final url = '$_kBaseUrl/uploads/${widget.fileName}';
+      final url = '${UrlService().baseUrl}/uploads/${widget.fileName}';
       final response = await http.get(Uri.parse(url));
 
       if (response.statusCode != 200) {
@@ -368,7 +368,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       await tempFile.writeAsBytes(pdfBytes);
 
       final uri = Uri.parse(
-        'http://localhost:5000/documents/dmApprove/${widget.documentId}',
+        '${UrlService().baseUrl}/documents/dmApprove/${widget.documentId}',
       );
 
       final request = http.MultipartRequest('POST', uri);
@@ -411,7 +411,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       await tempFile.writeAsBytes(pdfBytes);
 
       final uri = Uri.parse(
-        'http://localhost:5000/documents/directorApprove/${widget.documentId}',
+        '${UrlService().baseUrl}/documents/directorApprove/${widget.documentId}',
       );
 
       final request = http.MultipartRequest('POST', uri);
@@ -452,7 +452,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       );
       await tempFile.writeAsBytes(pdfBytes);
 
-      final uri = Uri.parse('$_kBaseUrl/documents/upload');
+      final uri = Uri.parse('${UrlService().baseUrl}/documents/upload');
       final request = http.MultipartRequest('POST', uri);
 
       final docProvider = context.read<DocumentProvider>();

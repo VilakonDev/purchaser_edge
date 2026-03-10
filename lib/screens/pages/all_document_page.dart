@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:provider/provider.dart';
 
@@ -6,6 +7,7 @@ import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 
 import 'package:purchaser_edge/services/color_service.dart';
+import 'package:purchaser_edge/services/url_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
 import 'package:unicons/unicons.dart';
@@ -27,6 +29,8 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
     _horizontalController.dispose();
     super.dispose();
   }
+
+  String selectedDocumentCategory = 'ທັງຫມົດ';
 
   @override
   Widget build(BuildContext context) {
@@ -150,12 +154,16 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                 rows: List.generate(
                                   context
                                       .watch<DocumentProvider>()
-                                      .documents
+                                      .getDocumentByCategory(
+                                        selectedDocumentCategory.toString(),
+                                      )
                                       .length,
                                   (index) {
                                     final cellData = context
-                                        .watch<DocumentProvider>()
-                                        .documents[index];
+                                        .read<DocumentProvider>()
+                                        .getDocumentByCategory(
+                                          selectedDocumentCategory.toString(),
+                                        )[index];
 
                                     return DataRow(
                                       cells: [
@@ -165,7 +173,15 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                           Text(cellData.documentCategory),
                                         ),
                                         DataCell(Text(cellData.createdBy)),
-                                        DataCell(Text(cellData.createdAt)),
+                                        DataCell(
+                                          Text(
+                                            DateFormat('M / d / y').format(
+                                              DateTime.parse(
+                                                cellData.createdAt,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                         DataCell(
                                           cellData.status == "PENDING"
                                               ? Text('...........')
@@ -231,7 +247,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.filePending}",
+                                                              "${UrlService().baseUrl}/uploads/${cellData.filePending}",
                                                             )
                                                       : cellData.status ==
                                                             "DM_APPROVED"
@@ -240,14 +256,14 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.fileDm}",
+                                                              "${UrlService().baseUrl}/uploads/${cellData.fileDm}",
                                                             )
                                                       : context
                                                             .read<
                                                               FileProvider
                                                             >()
                                                             .openFile(
-                                                              "http://192.168.1.181:5000/uploads/${cellData.fileDirector}",
+                                                              "${UrlService().baseUrl}/uploads/${cellData.fileDirector}",
                                                             );
                                                 },
                                               ),
@@ -307,15 +323,15 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
           Expanded(
             child: DropDownWidget(
               label: 'ກຸ່ມສິນຄ້າ',
-              items: context.read<DocumentProvider>().category,
+              items: ['ທັງຫມົດ', ...context.read<DocumentProvider>().category],
+              onChanged: (value) {
+                setState(() {
+                  selectedDocumentCategory = value.toString();
+                });
+              },
             ),
           ),
-          Expanded(
-            child: DropDownWidget(
-              label: 'ສະຖານະ',
-              items: ['ອະນຸມັດແລ້ວ', 'ລໍຖ້າອະນຸມັດ', 'ເອກະສານຕີກັບ'],
-            ),
-          ),
+
           Container(width: 300, height: 40),
           Column(
             children: [

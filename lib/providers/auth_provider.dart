@@ -5,13 +5,14 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:purchaser_edge/model/user_model.dart';
+import 'package:purchaser_edge/services/url_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthProvider extends ChangeNotifier {
   CurrentUserModel? currentUser;
 
-  String baseURL = "http://192.168.1.181:5000";
+ 
 
   Future<String?> getDeviceID() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -31,7 +32,7 @@ class AuthProvider extends ChangeNotifier {
       final licenseKey = pref.getString('license_key');
 
       final response = await http.post(
-        Uri.parse('$baseURL/auth/license'),
+        Uri.parse('${UrlService().baseUrl}/auth/license'),
         body: {
           "license_key": licenseKey ?? '',
           "device_id": await getDeviceID() ?? '',
@@ -57,7 +58,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> activateLicense(String licenseKey) async {
     final response = await http.post(
-      Uri.parse(baseURL + '/auth/activate'),
+      Uri.parse(UrlService().baseUrl + '/auth/activate'),
       body: {"license_key": licenseKey, "device_id": await getDeviceID() ?? ""},
     );
 
@@ -77,7 +78,7 @@ class AuthProvider extends ChangeNotifier {
     String password,
   ) async {
     final response = await http.post(
-      Uri.parse('http://192.168.1.181:5000/auth/login'),
+      Uri.parse('${UrlService().baseUrl}/auth/login'),
       body: {"username": username, "password": password},
     );
 

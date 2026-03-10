@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+
 import 'package:pie_chart_sz/ValueSettings.dart';
 import 'package:pie_chart_sz/pie_chart_sz.dart';
 import 'package:provider/provider.dart';
@@ -18,24 +18,6 @@ class DashBoardPage extends StatefulWidget {
 }
 
 class _DashBoardPageState extends State<DashBoardPage> {
-  List<MonthlyBuyModel> _buyList = [
-    MonthlyBuyModel('ມ.ກ', 50),
-    MonthlyBuyModel('ກ.ພ', 78),
-    MonthlyBuyModel('ມີ.ນ', 12),
-    MonthlyBuyModel('ເມ.ສ', 33),
-    MonthlyBuyModel('ພ.ພ', 65),
-    MonthlyBuyModel('ມິ.ຖ', 44),
-    MonthlyBuyModel('ກ.ລ', 21),
-    MonthlyBuyModel('ສ.ຫ', 19),
-    MonthlyBuyModel('ກ.ຍ', 80),
-    MonthlyBuyModel('ຕ.ລ', 90),
-    MonthlyBuyModel('ພ.ຈ', 100),
-    MonthlyBuyModel('ທ.ວ', 78),
-  ];
-
-  final ScrollController _verticalController = ScrollController();
-  final ScrollController _horizontalController = ScrollController();
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -57,38 +39,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
                     _buildNotification(),
                   ],
                 ),
-                Row(
-                  spacing: 20,
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: Container(
-                        height: 400,
-                        padding: EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          spacing: 10,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'ເອກະສານລ່າສຸດ',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: ColorService().mainTextColor,
-                              ),
-                            ),
-                            _buildRecentDocument(),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Container()),
-                  ],
-                ),
+
                 Container(),
               ],
             ),
@@ -287,7 +238,7 @@ class _DashBoardPageState extends State<DashBoardPage> {
                 tooltipBehavior: TooltipBehavior(enable: true),
                 series: <CartesianSeries>[
                   ColumnSeries<MonthlyBuyModel, String>(
-                    dataSource: _buyList,
+                    dataSource: context.read<DocumentProvider>().getMonthlyBuy(),
                     xValueMapper: (MonthlyBuyModel data, _) => data.month,
                     yValueMapper: (MonthlyBuyModel data, _) => data.sales,
                     borderRadius: BorderRadius.vertical(
@@ -329,146 +280,6 @@ class _DashBoardPageState extends State<DashBoardPage> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecentDocument() {
-    return Expanded(
-      child: RawScrollbar(
-        controller: _verticalController,
-        thumbVisibility: true,
-        trackVisibility: true,
-        scrollbarOrientation: ScrollbarOrientation.right,
-        thickness: 8,
-        radius: Radius.circular(4),
-        child: SingleChildScrollView(
-          controller: _verticalController,
-          scrollDirection: Axis.vertical,
-          child: RawScrollbar(
-            controller: _horizontalController,
-            thumbVisibility: true,
-            trackVisibility: true,
-            scrollbarOrientation: ScrollbarOrientation.bottom,
-            thickness: 8,
-            radius: Radius.circular(4),
-            child: SingleChildScrollView(
-              controller: _horizontalController,
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: MediaQuery.of(context).size.width - 40,
-                ),
-                child: DataTable(
-                  columnSpacing: 24,
-                  headingRowColor: MaterialStatePropertyAll(
-                    Colors.blue.shade300,
-                  ),
-                  dataRowColor: MaterialStatePropertyAll(Colors.white),
-                  columns: [
-                    DataColumn(
-                      label: Text(
-                        'ເລກທີ່ເອກະສານ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ປະເພດເອກະສານ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ຊື່ເລື່ອງ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ຜູ້ສົ່ງເອກະສານ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ວັນທີສົ່ງເອກະສານ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ສະຖານະ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'ຈັດການ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                    ),
-                  ],
-                  rows: List.generate(10, (index) {
-                    return DataRow(
-                      cells: [
-                        DataCell(Text('PO-2026-00$index')),
-                        DataCell(Text('ໃບສັ່ງຊື້ສິນຄ້າ')),
-                        DataCell(
-                          Text(
-                            'ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ ວັດສະດຸໂຄງສ້າງ',
-                          ),
-                        ),
-                        DataCell(Text('ວຽງຄອນ ມຸນຕີວົງ')),
-                        DataCell(
-                          Text(DateFormat('EEE, M/d/y').format(DateTime.now())),
-                        ),
-                        DataCell(
-                          Container(
-                            width: 120,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'ອະນຸມັດແລ້ວ',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataCell(Row(spacing: 8, children: [])),
-                      ],
-                    );
-                  }),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );

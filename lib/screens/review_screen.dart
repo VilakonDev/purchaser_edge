@@ -1,14 +1,16 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfrx/pdfrx.dart' as pdfrx;
+
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/services/url_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:unicons/unicons.dart';
@@ -45,11 +47,9 @@ class ReviewScreen extends StatelessWidget {
 
       if (!needsRotate && !hasSigs) {
         // ── Fast path ──────────────────────────────────────────────────────
-        // โหลด full doc แล้วลบหน้าที่ไม่ต้องการออก → font resources ยังอยู่
         final PdfDocument fullDoc = PdfDocument(inputBytes: srcBytes);
         final int total = fullDoc.pages.count;
 
-        // ลบจากท้ายไปหน้า เพื่อไม่ให้ index เลื่อน
         for (int p = total - 1; p >= 0; p--) {
           if (p != pageInfo.pageNumber - 1) {
             fullDoc.pages.removeAt(p);
@@ -61,7 +61,6 @@ class ReviewScreen extends StatelessWidget {
         fullDoc.dispose();
       } else {
         // ── Slow path ──────────────────────────────────────────────────────
-        // ต้อง rotate หรือวาง signature → ใช้ drawPdfTemplate
         final PdfDocument loadedDoc = PdfDocument(inputBytes: srcBytes);
         final PdfPage sourcePage = loadedDoc.pages[pageInfo.pageNumber - 1];
         final Size orig = sourcePage.size;
@@ -134,7 +133,6 @@ class ReviewScreen extends StatelessWidget {
     if (pageBytesList.isEmpty) return Uint8List(0);
     if (pageBytesList.length == 1) return pageBytesList.first;
 
-    // ✅ merge โดยใช้ addPage loop — ใช้ได้ทุก Syncfusion version
     final PdfDocument mergedDoc = PdfDocument();
     mergedDoc.pageSettings.margins.all = 0;
 
@@ -201,7 +199,7 @@ class ReviewScreen extends StatelessWidget {
       );
       await tempFile.writeAsBytes(pdfBytes);
 
-      final uri = Uri.parse('http://192.168.1.181:5000/documents/upload');
+      final uri = Uri.parse('${UrlService().baseUrl}/documents/upload');
       final request = http.MultipartRequest('POST', uri);
 
       request.fields['document_number'] =
@@ -577,6 +575,7 @@ class _ReviewPageItem extends StatelessWidget {
                     aspectRatio: aspectRatio,
                     child: Stack(
                       children: [
+                        // ✅ ใช้ SfPdfViewer แสดง PDF โดยตรง ไม่ render เป็นรูป
                         Positioned.fill(
                           child: _ReviewPdfPageViewer(
                             filePath: pageInfo.filePath,
@@ -602,8 +601,8 @@ class _ReviewPageItem extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // _ReviewPdfPageViewer
-// ✅ ใช้ pdfrx render เป็น PNG — PDFium มี font engine ในตัว
-//    ไม่พึ่ง Windows system font → ไม่เป็น □
+// ✅ ใช้ SfPdfViewer แสดง PDF โดยตรง — ไม่ render เป็น PNG
+//    แก้ปัญหา thumbnail render ไม่ได้แล้ว ReviewScreen พังตาม
 // ─────────────────────────────────────────────────────────────────────────────
 class _ReviewPdfPageViewer extends StatefulWidget {
   final String filePath;
@@ -621,15 +620,14 @@ class _ReviewPdfPageViewer extends StatefulWidget {
 }
 
 class _ReviewPdfPageViewerState extends State<_ReviewPdfPageViewer> {
-  Uint8List? _imageBytes;
-  bool _isLoading = true;
-  bool _hasError = false;
-  int _generation = 0;
+  PdfViewerController? _controller;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
-    _renderPage();
+    _controller = PdfViewerController();
+    _jumpToPage();
   }
 
   @override
@@ -638,197 +636,62 @@ class _ReviewPdfPageViewerState extends State<_ReviewPdfPageViewer> {
     if (oldWidget.filePath != widget.filePath ||
         oldWidget.pageNumber != widget.pageNumber ||
         oldWidget.rotation != widget.rotation) {
-      _generation++;
-      _renderPage();
+      _jumpToPage();
     }
   }
 
-  Future<void> _renderPage() async {
-    final int myGen = _generation;
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
+  void _jumpToPage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed && _controller != null && mounted) {
+        _controller!.jumpToPage(widget.pageNumber);
+      }
     });
-
-    pdfrx.PdfDocument? doc;
-    try {
-      doc = await pdfrx.PdfDocument.openFile(widget.filePath);
-      if (myGen != _generation || !mounted) return;
-
-      final int total = doc.pages.length;
-      if (widget.pageNumber < 1 || widget.pageNumber > total) {
-        throw Exception('page out of range');
-      }
-
-      final page = doc.pages[widget.pageNumber - 1];
-
-      // render ความละเอียดสูง 2400px สำหรับ review
-      const double targetLong = 2400.0;
-      final double scale = page.width >= page.height
-          ? targetLong / page.width
-          : targetLong / page.height;
-      final int imgW = (page.width * scale).round().clamp(1, 2400);
-      final int imgH = (page.height * scale).round().clamp(1, 2400);
-
-      final pdfrx.PdfImage? pageImage = await page.render(
-        fullWidth: imgW.toDouble(),
-        fullHeight: imgH.toDouble(),
-      );
-
-      if (pageImage == null) throw Exception('render returned null');
-      if (myGen != _generation || !mounted) return;
-
-      final Uint8List pixelsCopy = Uint8List.fromList(pageImage.pixels);
-      final int pw = pageImage.width;
-      final int ph = pageImage.height;
-
-      doc.dispose();
-      doc = null;
-
-      // pixels → PNG
-      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
-        pixelsCopy,
-      );
-      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
-        buffer,
-        width: pw,
-        height: ph,
-        pixelFormat: ui.PixelFormat.rgba8888,
-      );
-      final ui.Codec codec = await descriptor.instantiateCodec();
-      final ui.FrameInfo frameInfo = await codec.getNextFrame();
-      final ByteData? byteData = await frameInfo.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      frameInfo.image.dispose();
-      codec.dispose();
-
-      if (byteData == null) throw Exception('toByteData failed');
-      if (myGen != _generation || !mounted) return;
-
-      Uint8List pngBytes = byteData.buffer.asUint8List();
-
-      if (widget.rotation != 0) {
-        pngBytes = await _rotateImage(pngBytes, widget.rotation);
-      }
-
-      if (myGen != _generation || !mounted) return;
-      setState(() {
-        _imageBytes = pngBytes;
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint('[ReviewPdfPageViewer] error: $e');
-      if (myGen != _generation || !mounted) return;
-      setState(() {
-        _hasError = true;
-        _isLoading = false;
-      });
-    } finally {
-      doc?.dispose();
-    }
   }
 
-  Future<Uint8List> _rotateImage(Uint8List src, int rotation) async {
-    final ui.Codec codec = await ui.instantiateImageCodec(src);
-    final ui.FrameInfo frame = await codec.getNextFrame();
-    final ui.Image img = frame.image;
-    codec.dispose();
-
-    final int w = img.width;
-    final int h = img.height;
-    final bool swap = rotation == 90 || rotation == 270;
-    final int cw = swap ? h : w;
-    final int ch = swap ? w : h;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.translate(cw / 2, ch / 2);
-    canvas.rotate(rotation * 3.141592653589793 / 180.0);
-    canvas.translate(-w / 2, -h / 2);
-    canvas.drawImage(img, Offset.zero, Paint());
-    img.dispose();
-
-    final ui.Picture picture = recorder.endRecording();
-    final ui.Image rotated = await picture.toImage(cw, ch);
-    final ByteData? bd = await rotated.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    rotated.dispose();
-    return bd!.buffer.asUint8List();
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _controller?.dispose();
+    _controller = null;
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Container(
-        color: Colors.white,
-        child: const Center(child: CircularProgressIndicator()),
-      );
+    if (_controller == null) {
+      return const Center(child: CircularProgressIndicator());
     }
 
-    if (_hasError || _imageBytes == null) {
-      return Container(
-        color: Colors.white,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.broken_image_outlined,
-                color: Colors.grey.shade400,
-                size: 48,
-              ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () {
-                  _generation++;
-                  _renderPage();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.refresh,
-                        size: 16,
-                        color: Colors.blue.shade600,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'ລອງໃໝ່',
-                        style: TextStyle(
-                          color: Colors.blue.shade600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+    return ClipRect(
+      child: RotatedBox(
+        quarterTurns: widget.rotation ~/ 90,
+        child: SfPdfViewer.file(
+          File(widget.filePath),
+          controller: _controller!,
+          key: ValueKey(
+            'review_${widget.filePath}_${widget.pageNumber}_${widget.rotation}',
           ),
+          enableDoubleTapZooming: false,
+          enableTextSelection: false,
+          canShowScrollHead: false,
+          canShowScrollStatus: false,
+          pageLayoutMode: PdfPageLayoutMode.single,
+          interactionMode: PdfInteractionMode.pan,
+          scrollDirection: PdfScrollDirection.vertical,
+          onPageChanged: (PdfPageChangedDetails details) {
+            // ✅ ล็อกไม่ให้เลื่อนไปหน้าอื่น
+            if (!_isDisposed &&
+                details.newPageNumber != widget.pageNumber &&
+                mounted) {
+              Future.microtask(() {
+                if (!_isDisposed && _controller != null && mounted) {
+                  _controller!.jumpToPage(widget.pageNumber);
+                }
+              });
+            }
+          },
         ),
-      );
-    }
-
-    return Image.memory(
-      _imageBytes!,
-      fit: BoxFit.contain,
-      width: double.infinity,
-      height: double.infinity,
-      gaplessPlayback: true,
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
@@ -196,7 +197,15 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                           Text(cellData.documentCategory),
                                         ),
                                         DataCell(Text(cellData.createdBy)),
-                                        DataCell(Text(cellData.createdAt)),
+                                        DataCell(
+                                          Text(
+                                            DateFormat('m / d y').format(
+                                              DateTime.parse(
+                                                cellData.createdAt,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                         DataCell(
                                           cellData.status == "PENDING"
                                               ? Text('...........')

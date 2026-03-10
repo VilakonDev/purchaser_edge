@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:purchaser_edge/model/document_model.dart';
 import 'package:http/http.dart' as http;
+import 'package:purchaser_edge/model/monthly_buy_model.dart';
+import 'package:purchaser_edge/services/url_service.dart';
 
 class DocumentProvider extends ChangeNotifier {
   List<String> _category = [
@@ -72,7 +74,7 @@ class DocumentProvider extends ChangeNotifier {
 
   Future getAllDocument(String role) async {
     final response = await http.get(
-      Uri.parse('http://192.168.1.181:5000/documents/getAllDocument'),
+      Uri.parse('${UrlService().baseUrl}/documents/getAllDocument'),
     );
 
     if (response.statusCode == 200) {
@@ -80,11 +82,7 @@ class DocumentProvider extends ChangeNotifier {
 
       _documents = data.map((e) => DocumentModel.fromJson(e)).toList();
 
-      
-
       notifyListeners();
-
-
     }
   }
 
@@ -96,4 +94,43 @@ class DocumentProvider extends ChangeNotifier {
 
   List<DocumentModel> get directorApproved =>
       _documents.where((doc) => doc.status == "DIRECTOR_APPROVED").toList();
+
+  List<DocumentModel> getDocumentByCategory(String category) {
+    if (category == "ທັງຫມົດ") {
+      return _documents;
+    }
+
+    return _documents.where((doc) => doc.documentCategory == category).toList();
+  }
+
+  List<MonthlyBuyModel> getMonthlyBuy() {
+    List<MonthlyBuyModel> result = [];
+
+    List<String> months = [
+      'ມ.ກ',
+      'ກ.ພ',
+      'ມີ.ນ',
+      'ເມ.ສ',
+      'ພ.ພ',
+      'ມິ.ຖ',
+      'ກ.ລ',
+      'ສ.ຫ',
+      'ກ.ຍ',
+      'ຕ.ລ',
+      'ພ.ຈ',
+      'ທ.ວ',
+    ];
+
+    for (int i = 1; i <= 12; i++) {
+      int count = _documents.where((doc) {
+        final date = DateTime.parse(doc.createdAt); // parse ก่อน
+        return date.month == i &&
+            doc.status == "DIRECTOR_APPROVED"; // filter status ด้วย
+      }).length;
+
+      result.add(MonthlyBuyModel(months[i - 1], count.toDouble()));
+    }
+
+    return result;
+  }
 }
