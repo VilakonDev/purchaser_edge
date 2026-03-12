@@ -8,6 +8,7 @@ import 'package:purchaser_edge/screens/pages/all_document_page.dart';
 import 'package:purchaser_edge/screens/pages/approve_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
+
 import 'package:purchaser_edge/screens/pages/user_management_page.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:unicons/unicons.dart';
@@ -34,9 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    context.read<DocumentProvider>().startAutoFetchDocument(
-      context.read<AuthProvider>().currentUser!.role,
-    );
+    context.read<DocumentProvider>().startAutoFetchDocument();
     context.read<UserProvider>().startAutoFetchUser();
 
     return Scaffold(
@@ -139,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
               role == "DISTRICT_MANAGER" || role == "DIRECTOR"
                   ? _buildSideBarMenu(4, UniconsLine.check, 'ອະນຸມັດ')
                   : Container(),
+           
             ],
           ),
 

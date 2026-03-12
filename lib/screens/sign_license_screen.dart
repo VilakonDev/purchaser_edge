@@ -42,6 +42,7 @@ class _SignLicenseScreenState extends State<SignLicenseScreen> {
                 ),
                 TextFiledWidget(
                   label: 'LicenseKey',
+                  isHidden: false,
                   controller: licenseKeyController,
                 ),
                 GestureDetector(

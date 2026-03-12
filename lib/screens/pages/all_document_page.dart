@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 
 import 'package:purchaser_edge/services/color_service.dart';
-import 'package:purchaser_edge/services/url_service.dart';
+
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
 import 'package:unicons/unicons.dart';
@@ -34,6 +35,15 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = context.read<AuthProvider>().currentUser!;
+
+    final showDocumentByOfficerCategory = context
+        .watch<DocumentProvider>()
+        .showDocumentByOfficerCategory(currentUser.category);
+    final showAllDocuments = context.watch<DocumentProvider>().showAllDocuments(
+      selectedDocumentCategory,
+    );
+    final fileLauncher = context.read<FileProvider>();
     return Container(
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
       child: Column(
@@ -46,7 +56,9 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                 spacing: 20,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSearchBox(),
+                  currentUser.role == "PURCHASER"
+                      ? Container()
+                      : _buildSearchBox(),
                   Expanded(
                     child: Scrollbar(
                       controller: _verticalController,
@@ -152,18 +164,14 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                   ),
                                 ],
                                 rows: List.generate(
-                                  context
-                                      .watch<DocumentProvider>()
-                                      .getDocumentByCategory(
-                                        selectedDocumentCategory.toString(),
-                                      )
-                                      .length,
+                                  currentUser.role == "PURCHASER"
+                                      ? showDocumentByOfficerCategory.length
+                                      : showAllDocuments.length,
                                   (index) {
-                                    final cellData = context
-                                        .read<DocumentProvider>()
-                                        .getDocumentByCategory(
-                                          selectedDocumentCategory.toString(),
-                                        )[index];
+                                    final cellData =
+                                        currentUser.role == "PURCHASER"
+                                        ? showDocumentByOfficerCategory[index]
+                                        : showAllDocuments[index];
 
                                     return DataRow(
                                       cells: [
@@ -242,29 +250,17 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                 color: Colors.blue,
                                                 onPressed: () {
                                                   cellData.status == "PENDING"
-                                                      ? context
-                                                            .read<
-                                                              FileProvider
-                                                            >()
-                                                            .openFile(
-                                                              "${UrlService().baseUrl}/uploads/${cellData.filePending}",
-                                                            )
+                                                      ? fileLauncher.openFile(
+                                                          cellData.filePending,
+                                                        )
                                                       : cellData.status ==
                                                             "DM_APPROVED"
-                                                      ? context
-                                                            .read<
-                                                              FileProvider
-                                                            >()
-                                                            .openFile(
-                                                              "${UrlService().baseUrl}/uploads/${cellData.fileDm}",
-                                                            )
-                                                      : context
-                                                            .read<
-                                                              FileProvider
-                                                            >()
-                                                            .openFile(
-                                                              "${UrlService().baseUrl}/uploads/${cellData.fileDirector}",
-                                                            );
+                                                      ? fileLauncher.openFile(
+                                                          cellData.fileDm,
+                                                        )
+                                                      : fileLauncher.openFile(
+                                                          cellData.fileDirector,
+                                                        );
                                                 },
                                               ),
                                             ],

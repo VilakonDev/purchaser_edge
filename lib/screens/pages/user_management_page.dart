@@ -1,5 +1,10 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/document_provider.dart';
+
 import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
@@ -20,10 +25,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   String? roleSelected;
   String? branchSelected;
+  String? categorySelected;
 
   final fullNameController = TextEditingController();
   final usernameController = TextEditingController();
   final passwordControlelr = TextEditingController();
+
+  void pickSignatureFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpeg', 'png', 'jpg'],
+      allowMultiple: true,
+    );
+
+    if (result != null) {
+      List<File> file = result.paths.map((path) => File(path!)).toList();
+      context.read<UserProvider>().addSignature(file);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +136,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                 ),
                                 DataColumn(
                                   label: Text(
+                                    'ຮັບຜິດຊອບກຸ່ມ',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                DataColumn(
+                                  label: Text(
                                     'ສະຖານະ',
                                     style: TextStyle(color: Colors.white),
                                   ),
@@ -142,6 +167,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       DataCell(Text(userData.username)),
                                       DataCell(Text(userData.role)),
                                       DataCell(Text(userData.branch)),
+                                      DataCell(Text(userData.category)),
                                       DataCell(
                                         Container(
                                           width: 20,
@@ -158,19 +184,26 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                         Row(
                                           spacing: 5,
                                           children: [
-                                            Container(
-                                              width: 40,
-                                              height: 40,
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    ColorService().errorColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Center(
-                                                child: Icon(
-                                                  UniconsLine.times_circle,
-                                                  color: Colors.white,
+                                            GestureDetector(
+                                              onTap: () {
+                                                context
+                                                    .read<UserProvider>()
+                                                    .deleteUser(userData.id);
+                                              },
+                                              child: Container(
+                                                width: 40,
+                                                height: 40,
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      ColorService().errorColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Center(
+                                                  child: Icon(
+                                                    UniconsLine.times_circle,
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -214,166 +247,256 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Widget _buildCreteUser() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            width: 700,
-
-            decoration: BoxDecoration(
-              color: Colors.white,
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Material(
               borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  width: double.infinity,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: ColorService().mainGredientColor,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(10),
-                      topRight: Radius.circular(10),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'ເພີ່ມຜູ້ໃຊ້ | ແກ້ໄຂ',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
+              child: Container(
+                width: 700,
+
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                Padding(
-                  padding: EdgeInsetsGeometry.all(20),
-                  child: Column(
-                    children: [
-                      TextFiledWidget(
-                        label: 'ຊື່ ແລະ ນາມສະກຸນ',
-                        controller: fullNameController,
+                child: Column(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      width: double.infinity,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: ColorService().mainGredientColor,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(10),
+                          topRight: Radius.circular(10),
+                        ),
                       ),
-                      Row(
-                        spacing: 10,
+                      child: Row(
                         children: [
-                          Expanded(
-                            child: TextFiledWidget(
-                              label: 'ຊື່ຜູ້ໃຊ້',
-                              controller: usernameController,
-                            ),
-                          ),
-                          Expanded(
-                            child: TextFiledWidget(
-                              label: 'ລະຫັດຜ່ານ',
-                              controller: passwordControlelr,
-                            ),
+                          Text(
+                            'ເພີ່ມຜູ້ໃຊ້ | ແກ້ໄຂ',
+                            style: TextStyle(color: Colors.white),
                           ),
                         ],
                       ),
-                      Row(
-                        spacing: 10,
+                    ),
+                    Padding(
+                      padding: EdgeInsetsGeometry.all(20),
+                      child: Column(
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: DropDownWidget(
-                              label: 'ສາຂາ',
-                              items: ['TCR_VTE', 'TCR_PAKSE01', 'TCR_PAKSE02'],
-                              onChanged: (value) {
-                                setState(() {
-                                  branchSelected = value;
-                                });
-                              },
-                            ),
-                          ),
-                          Expanded(
-                            flex: 1,
-                            child: DropDownWidget(
-                              label: 'ສິດໃຊ້ງານ',
-                              items: [
-                                'IT',
-                                'PURCHASER',
-                                'DISTRICT_MANAGER',
-                                'DIRECTOR',
-                              ],
-                              onChanged: (value) {
-                                setState(() {
-                                  roleSelected = value;
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 20),
-                      Row(
-                        spacing: 10,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Future.microtask(
-                                () => mounted ? Navigator.pop(context) : null,
-                              );
-                            },
-                            child: Container(
-                              height: 40,
-                              padding: EdgeInsets.symmetric(horizontal: 20),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade500,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(child: Text('ຍົກເລີກ')),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              final fullName = fullNameController.text.trim();
-                              final username = usernameController.text.trim();
-                              final password = passwordControlelr.text.trim();
-                              final branch = branchSelected;
-                              final role = roleSelected;
-
-                              context.read<UserProvider>().addUser(
-                                fullName,
-                                username,
-                                password,
-                                branch.toString(),
-                                role.toString(),
-                              );
-
-                              Future.microtask(
-                                () => mounted ? Navigator.pop(context) : null,
-                              );
-                            },
-                            child: Container(
-                              height: 40,
-                              padding: EdgeInsets.symmetric(horizontal: 20),
-                              decoration: BoxDecoration(
-                                gradient: ColorService().mainGredientColor,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'ບັນທຶກ',
-                                  style: TextStyle(color: Colors.white),
+                          Row(
+                            spacing: 5,
+                            children: [
+                              Expanded(
+                                child: TextFiledWidget(
+                                  label: 'ຊື່ ແລະ ນາມສະກຸນ',
+                                  isHidden: false,
+                                  controller: fullNameController,
                                 ),
                               ),
-                            ),
+                              Column(
+                                children: [
+                                  SizedBox(height: 40),
+                                  GestureDetector(
+                                    onTap: () {
+                                      pickSignatureFile();
+                                    },
+                                    child: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        gradient:
+                                            ColorService().mainGredientColor,
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          UniconsLine.paperclip,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Row(
+                            spacing: 10,
+                            children: [
+                              Expanded(
+                                child: TextFiledWidget(
+                                  label: 'ຊື່ຜູ້ໃຊ້',
+                                  isHidden: false,
+                                  controller: usernameController,
+                                ),
+                              ),
+                              Expanded(
+                                child: TextFiledWidget(
+                                  label: 'ລະຫັດຜ່ານ',
+                                  isHidden: false,
+                                  controller: passwordControlelr,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            spacing: 10,
+                            children: [
+                              Expanded(
+                                child: DropDownWidget(
+                                  label: 'ສາຂາ',
+                                  items: [
+                                    'TCR_VTE',
+                                    'TCR_PAKSE01',
+                                    'TCR_PAKSE02',
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      branchSelected = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                              Container(
+                                width: 300,
+                                child: DropDownWidget(
+                                  label: 'ສິດໃຊ້ງານ',
+                                  items: [
+                                    'IT',
+                                    'PURCHASER',
+                                    'PURCHASER_MANAGER',
+                                    'DISTRICT_MANAGER',
+                                    'DIRECTOR',
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      roleSelected = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 10),
+                          roleSelected == "DISTRICT_MANAGER" ||
+                                  roleSelected == "DIRECTOR" ||
+                                  roleSelected == "PURCHASER_MANAGER"
+                              ? Container()
+                              : Row(
+                                  spacing: 10,
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: DropDownWidget(
+                                        label: 'ຮັບຜິດຊອບກຸ່ມ',
+                                        items: context
+                                            .read<DocumentProvider>()
+                                            .category,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            categorySelected = value;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                          SizedBox(height: 20),
+                          Row(
+                            spacing: 10,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  context
+                                      .read<UserProvider>()
+                                      .signature
+                                      .clear();
+
+                                  Future.microtask(
+                                    () =>
+                                        mounted ? Navigator.pop(context) : null,
+                                  );
+                                },
+                                child: Container(
+                                  height: 40,
+                                  padding: EdgeInsets.symmetric(horizontal: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade500,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(child: Text('ຍົກເລີກ')),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  final fullName = fullNameController.text
+                                      .trim();
+                                  final username = usernameController.text
+                                      .trim();
+                                  final password = passwordControlelr.text
+                                      .trim();
+                                  final branch = branchSelected;
+                                  final role = roleSelected;
+
+                                  context.read<UserProvider>().addUser(
+                                    fullName,
+                                    username,
+                                    password,
+                                    branch.toString(),
+                                    categorySelected.toString(),
+                                    role.toString(),
+                                  );
+
+                                  Future.microtask(
+                                    () =>
+                                        mounted ? Navigator.pop(context) : null,
+                                  );
+                                },
+                                child: Container(
+                                  height: 40,
+                                  padding: EdgeInsets.symmetric(horizontal: 20),
+                                  decoration: BoxDecoration(
+                                    gradient:
+                                        context
+                                                .watch<UserProvider>()
+                                                .signature
+                                                .length ==
+                                            0
+                                        ? LinearGradient(
+                                            colors: [
+                                              Colors.grey.shade500,
+                                              Colors.grey.shade500,
+                                            ],
+                                          )
+                                        : ColorService().mainGredientColor,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'ບັນທຶກ',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

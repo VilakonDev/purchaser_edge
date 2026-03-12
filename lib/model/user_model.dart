@@ -5,6 +5,7 @@ class UserModel {
   final String password;
   final String role;
   final String branch;
+  final String category;
   final String status;
 
   UserModel({
@@ -14,6 +15,7 @@ class UserModel {
     required this.password,
     required this.role,
     required this.branch,
+    required this.category,
     required this.status,
   });
 
@@ -25,6 +27,7 @@ class UserModel {
       password: json['password'],
       role: json['role'],
       branch: json['branch'],
+      category: json['category'],
       status: json['status'],
     );
   }
@@ -37,6 +40,8 @@ class CurrentUserModel {
   final String password;
   final String role;
   final String branch;
+  final String category;
+  final String fileSignature;
   final String status;
 
   CurrentUserModel({
@@ -46,6 +51,8 @@ class CurrentUserModel {
     required this.password,
     required this.role,
     required this.branch,
+    required this.category,
+    required this.fileSignature,
     required this.status,
   });
 
@@ -57,6 +64,8 @@ class CurrentUserModel {
       password: json['password'],
       role: json['role'],
       branch: json['branch'],
+      category: json['category'],
+      fileSignature: json['file_signature'],
       status: json['status'],
     );
   }

@@ -72,10 +72,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 20),
                       TextFiledWidget(
                         label: 'ຊື່ຜູ້ໃຊ້',
+                        isHidden: false,
                         controller: usernameController,
                       ),
                       TextFiledWidget(
                         label: 'ລະຫັດຜ່ານ',
+                        isHidden: true,
                         controller: passwordController,
                       ),
                       SizedBox(height: 20),
@@ -197,12 +199,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           Expanded(
                             child: TextFiledWidget(
                               label: 'ຊື່',
+                              isHidden: false,
                               controller: TextEditingController(),
                             ),
                           ),
                           Expanded(
                             child: TextFiledWidget(
                               label: 'IP Address',
+                              isHidden: false,
                               controller: TextEditingController(),
                             ),
                           ),

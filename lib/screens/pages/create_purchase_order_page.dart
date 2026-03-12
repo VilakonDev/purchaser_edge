@@ -170,6 +170,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
   }
 
   Widget _buildDocumentInfo() {
+    final currentUser = context.read<AuthProvider>().currentUser!;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -196,12 +198,14 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 width: 200,
                 child: TextFiledWidget(
                   label: 'ໝາຍເລກ PO',
+                  isHidden: false,
                   controller: documentNumberController,
                 ),
               ),
               Expanded(
                 child: TextFiledWidget(
                   label: 'ຊື່ເລື່ອງ',
+                  isHidden: false,
                   controller: documentTitleController,
                 ),
               ),
@@ -210,17 +214,19 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
           Row(
             spacing: 20,
             children: [
-              Expanded(
-                child: DropDownWidget(
-                  label: 'ກຸ່ມເອກະສານ',
-                  items: context.read<DocumentProvider>().category,
-                  onChanged: (value) {
-                    setState(() {
-                      documentCategory = value;
-                    });
-                  },
-                ),
-              ),
+              currentUser.role == "PURCHASER"
+                  ? Container()
+                  : Expanded(
+                      child: DropDownWidget(
+                        label: 'ກຸ່ມເອກະສານ',
+                        items: context.read<DocumentProvider>().category,
+                        onChanged: (value) {
+                          setState(() {
+                            documentCategory = value;
+                          });
+                        },
+                      ),
+                    ),
               Expanded(child: SizedBox()),
               Expanded(
                 child: Align(
@@ -243,6 +249,8 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
   }
 
   Widget _buildBottomButton() {
+    final currentUser = context.read<AuthProvider>().currentUser!;
+
     return Container(
       width: double.infinity,
       height: 50,
@@ -279,6 +287,10 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
               final documentNumber = documentNumberController.text.trim();
               final documentTitle = documentTitleController.text.trim();
 
+              final category = currentUser.role == "PURCHASER"
+                  ? currentUser.category
+                  : documentCategory.toString();
+
               if (documentNumber.isEmpty || documentTitle.isEmpty) {
                 showDialog(
                   context: context,
@@ -291,7 +303,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                 context.read<DocumentProvider>().setDocumentInfo(
                   documentNumber,
                   documentTitle,
-                  documentCategory.toString(),
+                  category,
                   context.read<AuthProvider>().currentUser!.branch,
                   context.read<AuthProvider>().currentUser!.fullName,
                 );

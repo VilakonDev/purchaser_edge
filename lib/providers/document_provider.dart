@@ -60,9 +60,9 @@ class DocumentProvider extends ChangeNotifier {
 
   Timer? timer;
 
-  void startAutoFetchDocument(String role) {
+  void startAutoFetchDocument() {
     timer = Timer.periodic(Duration(seconds: 3), (timer) {
-      getAllDocument(role);
+      getAllDocuments();
 
       notifyListeners();
     });
@@ -72,7 +72,7 @@ class DocumentProvider extends ChangeNotifier {
 
   List<DocumentModel> get documents => _documents;
 
-  Future getAllDocument(String role) async {
+  Future getAllDocuments() async {
     final response = await http.get(
       Uri.parse('${UrlService().baseUrl}/documents/getAllDocument'),
     );
@@ -95,11 +95,15 @@ class DocumentProvider extends ChangeNotifier {
   List<DocumentModel> get directorApproved =>
       _documents.where((doc) => doc.status == "DIRECTOR_APPROVED").toList();
 
-  List<DocumentModel> getDocumentByCategory(String category) {
+  List<DocumentModel> showAllDocuments(String category) {
     if (category == "ທັງຫມົດ") {
       return _documents;
     }
 
+    return _documents.where((doc) => doc.documentCategory == category).toList();
+  }
+
+  List<DocumentModel> showDocumentByOfficerCategory(String category) {
     return _documents.where((doc) => doc.documentCategory == category).toList();
   }
 

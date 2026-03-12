@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:purchaser_edge/services/url_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 
@@ -29,8 +30,10 @@ class FileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void openFile(String url) async {
-    final uri = Uri.parse(url);
+  void openFile(String fileName) async {
+    final uri = Uri.parse(UrlService().baseUrl + '/uploads/${fileName}');
     await launchUrl(uri);
   }
+
+ 
 }

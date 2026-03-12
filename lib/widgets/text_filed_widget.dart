@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 
 class TextFiledWidget extends StatefulWidget {
-  const TextFiledWidget({required this.label,required this.controller,super.key});
+  const TextFiledWidget({required this.label,required this.isHidden,required this.controller,super.key});
 
   final String label;
+  final bool isHidden;
   final TextEditingController controller;
 
   @override
@@ -31,6 +32,7 @@ class _TextFiledWidgetState extends State<TextFiledWidget> {
           width: double.infinity,
           height: 40,
           child: TextField(
+            obscureText: widget.isHidden,
             controller: widget.controller,
             decoration: InputDecoration(
               filled: true,
