@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
-
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
-
 import 'package:purchaser_edge/services/color_service.dart';
-
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
 import 'package:unicons/unicons.dart';
@@ -22,28 +18,25 @@ class AllDocumentPage extends StatefulWidget {
 
 class _AllDocumentPageState extends State<AllDocumentPage> {
   final ScrollController _verticalController = ScrollController();
-  final ScrollController _horizontalController = ScrollController();
+  String selectedDocumentCategory = 'ທັງຫມົດ';
 
   @override
   void dispose() {
     _verticalController.dispose();
-    _horizontalController.dispose();
     super.dispose();
   }
-
-  String selectedDocumentCategory = 'ທັງຫມົດ';
 
   @override
   Widget build(BuildContext context) {
     final currentUser = context.read<AuthProvider>().currentUser!;
+    final isPurchaser = currentUser.role == "PURCHASER";
 
-    final showDocumentByOfficerCategory = context
-        .watch<DocumentProvider>()
-        .showDocumentByOfficerCategory(currentUser.category);
-    final showAllDocuments = context.watch<DocumentProvider>().showAllDocuments(
-      selectedDocumentCategory,
-    );
+    final documents = isPurchaser
+        ? context.watch<DocumentProvider>().showDocumentByOfficerCategory(currentUser.category)
+        : context.watch<DocumentProvider>().showAllDocuments(selectedDocumentCategory);
+
     final fileLauncher = context.read<FileProvider>();
+
     return Container(
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
       child: Column(
@@ -53,230 +46,217 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
-                spacing: 20,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  currentUser.role == "PURCHASER"
-                      ? Container()
-                      : _buildSearchBox(),
-                  Expanded(
-                    child: Scrollbar(
-                      controller: _verticalController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      child: Scrollbar(
-                        controller: _horizontalController,
-                        thumbVisibility: true,
-                        trackVisibility: true,
-                        notificationPredicate: (notif) =>
-                            notif.metrics.axis == Axis.horizontal,
-                        child: SingleChildScrollView(
-                          controller: _verticalController,
-                          scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            controller: _horizontalController,
-                            scrollDirection: Axis.horizontal,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minWidth:
-                                    MediaQuery.of(context).size.width - 40,
-                              ),
-                              child: DataTable(
-                                columnSpacing: 24,
-                                headingRowColor: MaterialStatePropertyAll(
-                                  Colors.blue.shade300,
-                                ),
-                                dataRowColor: const MaterialStatePropertyAll(
-                                  Colors.white,
-                                ),
-                                columns: const [
-                                  DataColumn(
-                                    label: Text(
-                                      'ເລກທີ່ເອກະສານ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ຊື່ເລື່ອງ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ກຸ່ມເອກະສານ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ຜູ້ສົ່ງເອກະສານ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ວັນທີສົ່ງເອກະສານ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ຜູ້ຈັດການເຂດ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ຜູ້ບໍລິຫານ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      'ຈັດການ',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w300,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                rows: List.generate(
-                                  currentUser.role == "PURCHASER"
-                                      ? showDocumentByOfficerCategory.length
-                                      : showAllDocuments.length,
-                                  (index) {
-                                    final cellData =
-                                        currentUser.role == "PURCHASER"
-                                        ? showDocumentByOfficerCategory[index]
-                                        : showAllDocuments[index];
+                  if (!isPurchaser) ...[
+                    const SizedBox(height: 20),
+                    _buildSearchBox(),
+                  ],
+                  const SizedBox(height: 20),
 
-                                    return DataRow(
-                                      cells: [
-                                        DataCell(Text(cellData.documentNumber)),
-                                        DataCell(Text(cellData.documentTitle)),
-                                        DataCell(
-                                          Text(cellData.documentCategory),
-                                        ),
-                                        DataCell(Text(cellData.createdBy)),
-                                        DataCell(
-                                          Text(
-                                            DateFormat('M / d / y').format(
-                                              DateTime.parse(
-                                                cellData.createdAt,
-                                              ),
-                                            ),
+                  // Summary chips
+                  Row(
+                    children: [
+                      _summaryChip(
+                        icon: UniconsLine.file_alt,
+                        label: 'ທັງໝົດ',
+                        count: documents.length,
+                        color: ColorService().primaryColor,
+                      ),
+                      const SizedBox(width: 10),
+                      _summaryChip(
+                        icon: UniconsLine.clock,
+                        label: 'ລໍຖ້າ',
+                        count: documents.where((d) => d.status == "PENDING").length,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 10),
+                      _summaryChip(
+                        icon: UniconsLine.check_circle,
+                        label: 'ອະນຸມັດ',
+                        count: documents.where((d) => d.status != "PENDING").length,
+                        color: ColorService().successColor,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Expanded(
+                    child: documents.isEmpty
+                        ? _buildEmptyState()
+                        : Scrollbar(
+                            controller: _verticalController,
+                            thumbVisibility: true,
+                            child: ListView.builder(
+                              controller: _verticalController,
+                              itemCount: documents.length,
+                              itemBuilder: (context, index) {
+                                final doc = documents[index];
+                                final isPending = doc.status == "PENDING";
+                                final isDirectorApproved = doc.status == "DIRECTOR_APPROVED";
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.04),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                    border: Border.all(
+                                      color: Colors.grey.withOpacity(0.08),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Icon box
+                                        Container(
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            color: ColorService().primaryColor.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            UniconsLine.file_alt,
+                                            color: ColorService().primaryColor,
+                                            size: 22,
                                           ),
                                         ),
-                                        DataCell(
-                                          cellData.status == "PENDING"
-                                              ? Text('...........')
-                                              : Container(
-                                                  width: 120,
-                                                  height: 36,
-                                                  decoration: BoxDecoration(
-                                                    color: ColorService()
-                                                        .successColor,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                  child: Center(
-                                                    child: Text(
-                                                      'ອະນຸມັດແລ້ວ',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                        ),
-                                        DataCell(
-                                          cellData.status == "PENDING"
-                                              ? Text('...........')
-                                              : cellData.status ==
-                                                    "DIRECTOR_APPROVED"
-                                              ? Container(
-                                                  width: 120,
-                                                  height: 36,
-                                                  decoration: BoxDecoration(
-                                                    color: ColorService()
-                                                        .successColor,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          10,
-                                                        ),
-                                                  ),
-                                                  child: Center(
-                                                    child: Text(
-                                                      'ອະນຸມັດແລ້ວ',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                )
-                                              : Container(),
-                                        ),
-                                        DataCell(
-                                          Row(
-                                            spacing: 10,
+
+                                        const SizedBox(width: 14),
+
+                                        // Content
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              _buildActionButton(
-                                                icon: UniconsLine.eye,
-                                                color: Colors.blue,
-                                                onPressed: () {
-                                                  cellData.status == "PENDING"
-                                                      ? fileLauncher.openFile(
-                                                          cellData.filePending,
-                                                        )
-                                                      : cellData.status ==
-                                                            "DM_APPROVED"
-                                                      ? fileLauncher.openFile(
-                                                          cellData.fileDm,
-                                                        )
-                                                      : fileLauncher.openFile(
-                                                          cellData.fileDirector,
-                                                        );
-                                                },
+                                              // Title + doc number
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      doc.documentTitle,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.w600,
+                                                        fontSize: 14,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey.shade100,
+                                                      borderRadius: BorderRadius.circular(20),
+                                                    ),
+                                                    child: Text(
+                                                      doc.documentNumber,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey.shade600,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+
+                                              const SizedBox(height: 8),
+
+                                              // Meta chips row
+                                              Wrap(
+                                                spacing: 6,
+                                                runSpacing: 6,
+                                                children: [
+                                                  _metaChip(
+                                                    icon: UniconsLine.folder,
+                                                    label: doc.documentCategory,
+                                                  ),
+                                                  _metaChip(
+                                                    icon: UniconsLine.user,
+                                                    label: doc.createdBy,
+                                                  ),
+                                                  _metaChip(
+                                                    icon: UniconsLine.calendar_alt,
+                                                    label: DateFormat('d MMM y').format(
+                                                      DateTime.parse(doc.createdAt),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+
+                                              const SizedBox(height: 10),
+
+                                              // Status row
+                                              Row(
+                                                children: [
+                                                  // DM status
+                                                  _statusBadge(
+                                                    label: 'ຜູ້ຈັດການ',
+                                                    approved: !isPending,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  // Director status
+                                                  _statusBadge(
+                                                    label: 'ຜູ້ບໍລິຫານ',
+                                                    approved: isDirectorApproved,
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
                                         ),
+
+                                        const SizedBox(width: 12),
+
+                                        // View button
+                                        GestureDetector(
+                                          onTap: () {
+                                            if (isPending) {
+                                              fileLauncher.openFile(doc.filePending);
+                                            } else if (doc.status == "DM_APPROVED") {
+                                              fileLauncher.openFile(doc.fileDm);
+                                            } else {
+                                              fileLauncher.openFile(doc.fileDirector);
+                                            }
+                                          },
+                                          child: Container(
+                                            width: 40,
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: const Icon(
+                                              UniconsLine.eye,
+                                              color: Colors.blue,
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ),
                                       ],
-                                    );
-                                  },
-                                ),
-                              ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                        ),
-                      ),
-                    ),
                   ),
+
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -286,21 +266,120 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
     );
   }
 
-  Widget _buildActionButton({
+  Widget _summaryChip({
     required IconData icon,
+    required String label,
+    required int count,
     required Color color,
-    VoidCallback? onPressed,
   }) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaChip({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: Colors.grey.shade500),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBadge({required String label, required bool approved}) {
+    final color = approved ? ColorService().successColor : Colors.orange;
+    final statusText = approved ? 'ອະນຸມັດແລ້ວ' : 'ລໍຖ້າ';
+    final statusIcon = approved ? UniconsLine.check_circle : UniconsLine.clock;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(statusIcon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$label: $statusText',
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(UniconsLine.file_slash, size: 56, color: Colors.grey.shade300),
+          const SizedBox(height: 12),
+          Text(
+            'ບໍ່ມີເອກະສານ',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey.shade400,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -308,13 +387,19 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
   Widget _buildSearchBox() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
-        spacing: 10,
         children: [
           Expanded(
             child: DropDownWidget(
@@ -327,26 +412,23 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
               },
             ),
           ),
-
-          Container(width: 300, height: 40),
-          Column(
-            children: [
-              const SizedBox(height: 25),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                height: 40,
-                decoration: BoxDecoration(
-                  color: ColorService().primaryColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: const [
-                    Text('ຄົ້ນຫາ', style: TextStyle(color: Colors.white)),
-                    Icon(UniconsLine.search, color: Colors.white),
-                  ],
-                ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () {},
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: ColorService().primaryColor,
+                borderRadius: BorderRadius.circular(12),
               ),
-            ],
+              child: Row(
+                children: const [
+                  Icon(UniconsLine.search, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text('ຄົ້ນຫາ', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
           ),
         ],
       ),

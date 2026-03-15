@@ -34,16 +34,16 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  List<File> _signature = [];
+  File? _signature;
 
-  List<File> get signature => _signature;
+  File? get signature => _signature;
 
-  void addSignature(List<File> newFiles) {
-    _signature.addAll(newFiles);
+  void setSignature(File? file) {
+    _signature = file; // ถ้า null = ลบไฟล์
     notifyListeners();
   }
 
-  Future addUser(
+  Future<http.Response?> addUser(
     String fullName,
     String username,
     String password,
@@ -51,8 +51,15 @@ class UserProvider extends ChangeNotifier {
     String category,
     String role,
   ) async {
+    if (_signature == null) {
+      print("No signature file selected");
+      return null;
+    }
+
     final url = Uri.parse(UrlService().baseUrl + '/user');
-    final request = http.AbortableMultipartRequest('POST', url);
+
+    // ✅ เปลี่ยนจาก AbortableMultipartRequest เป็น MultipartRequest ปกติ
+    final request = http.MultipartRequest('POST', url);
 
     request.fields['full_name'] = fullName;
     request.fields['username'] = username;
@@ -60,14 +67,22 @@ class UserProvider extends ChangeNotifier {
     request.fields['branch'] = branch;
     request.fields['category'] = category;
     request.fields['role'] = role;
+
     request.files.add(
-      await http.MultipartFile.fromPath(
-        'file', // ต้องตรงกับ .single("file")
-        _signature.first.path,
-      ),
+      await http.MultipartFile.fromPath('file', _signature!.path),
     );
 
-    final response = await request.send();
+    final streamedResponse = await request.send();
+
+    // ✅ แปลง StreamedResponse → Response เพื่อให้ใช้ statusCode ได้ตรงๆ
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      setSignature(null);
+      notifyListeners();
+    } else {
+      print('addUser error: ${response.statusCode} ${response.body}');
+    }
 
     return response;
   }

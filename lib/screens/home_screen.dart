@@ -8,7 +8,6 @@ import 'package:purchaser_edge/screens/pages/all_document_page.dart';
 import 'package:purchaser_edge/screens/pages/approve_document_page.dart';
 import 'package:purchaser_edge/screens/pages/create_purchase_order_page.dart';
 import 'package:purchaser_edge/screens/pages/dashboard_page.dart';
-
 import 'package:purchaser_edge/screens/pages/user_management_page.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:unicons/unicons.dart';
@@ -22,49 +21,86 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool isShowLabel = false;
-
   int currentPageIndex = 0;
 
-  List<Widget> _pages = [
-    DashBoardPage(),
-    CreatePurchaseOrderPage(),
-    AllDocumentPage(),
-    UserManagementPage(),
-    ApproveDocumentPage(),
-  ];
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      DashBoardPage(),
+      CreatePurchaseOrderPage(),
+      AllDocumentPage(),
+      UserManagementPage(),
+      ApproveDocumentPage(),
+    ];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DocumentProvider>().startAutoFetchDocument();
+      context.read<UserProvider>().startAutoFetchUser();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    context.read<DocumentProvider>().startAutoFetchDocument();
-    context.read<UserProvider>().startAutoFetchUser();
+    final currentUser = context.read<AuthProvider>().currentUser!;
+    final role = currentUser.role;
 
     return Scaffold(
       body: Row(
         children: [
-          _buildSideBar(),
+          _buildSideBar(role),
           Expanded(
             child: Column(
               children: [
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   width: double.infinity,
-                  height: 30,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: ColorService().mainBackGroundColor,
                   ),
                   child: Row(
                     children: [
+                      Icon(UniconsLine.user_circle, size: 14),
+                      const SizedBox(width: 6),
                       Text(
-                        'ຍິນດີຕ້ອນຮັບ ${context.read<AuthProvider>().currentUser?.fullName} - ${context.read<AuthProvider>().currentUser?.role}',
+                        '${currentUser.fullName}',
                         style: TextStyle(
                           color: ColorService().mainTextColor,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: ColorService().primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          role,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: ColorService().primaryColor,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Expanded(child: _pages[currentPageIndex]),
+                Expanded(
+                  child: IndexedStack(
+                    index: currentPageIndex,
+                    children: _pages,
+                  ),
+                ),
               ],
             ),
           ),
@@ -73,38 +109,50 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSideBar() {
-    final role = context.read<AuthProvider>().currentUser!.role;
+  Widget _buildSideBar(String role) {
+    Widget buildMenu(int index, IconData icon, String label) {
+      final isActive = currentPageIndex == index;
 
-    Widget _buildSideBarMenu(int index, IconData icon, String label) {
       return GestureDetector(
-        onTap: () {
-          setState(() {
-            currentPageIndex = index;
-          });
-        },
+        onTap: () => setState(() => currentPageIndex = index),
         child: Container(
-          height: 50,
-          decoration: BoxDecoration(),
+          height: 48,
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Row(
-            spacing: isShowLabel ? 10 : 0,
             children: [
-              Icon(icon, color: Colors.white),
-
-              isShowLabel
-                  ? Text(
-                      label,
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    )
-                  : SizedBox(),
+              Icon(
+                icon,
+                color: isActive ? Colors.white : Colors.white70,
+                size: 20,
+              ),
+              if (isShowLabel) ...[
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isActive ? Colors.white : Colors.white70,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       );
     }
 
-    return Container(
-      padding: EdgeInsets.all(20),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: isShowLabel ? 200 : 60,
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(gradient: ColorService().mainGredientColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,35 +161,38 @@ class _HomeScreenState extends State<HomeScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Toggle button
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    isShowLabel = !isShowLabel;
-                  });
-                },
+                onTap: () => setState(() => isShowLabel = !isShowLabel),
                 child: Container(
-                  height: 50,
+                  height: 48,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(
-                    spacing: 10,
-                    children: [Icon(UniconsLine.bars, color: Colors.white)],
+                    children: [
+                      Icon(
+                        isShowLabel
+                            ? UniconsLine.left_arrow_to_left
+                            : UniconsLine.bars,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ),
               ),
 
-              _buildSideBarMenu(0, UniconsLine.create_dashboard, 'ໜ້າຫຼັກ'),
-              _buildSideBarMenu(1, UniconsLine.plus_circle, 'ສ້າງເອກະສານໃຫມ່'),
-              _buildSideBarMenu(2, UniconsLine.file_alt, 'ເອກະສານທັງໝົດ'),
-
-              role == "IT"
-                  ? _buildSideBarMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ')
-                  : Container(),
-              role == "DISTRICT_MANAGER" || role == "DIRECTOR"
-                  ? _buildSideBarMenu(4, UniconsLine.check, 'ອະນຸມັດ')
-                  : Container(),
-           
+              buildMenu(0, UniconsLine.create_dashboard, 'ໜ້າຫຼັກ'),
+              buildMenu(1, UniconsLine.plus_circle, 'ສ້າງເອກະສານໃຫມ່'),
+              buildMenu(2, UniconsLine.file_alt, 'ເອກະສານທັງໝົດ'),
+              if (role == "IT")
+                buildMenu(3, UniconsLine.users_alt, 'ຜູ້ໃຊ້ງານ'),
+              if (role == "DISTRICT_MANAGER" || role == "DIRECTOR")
+                buildMenu(4, UniconsLine.check, 'ອະນຸມັດ'),
             ],
           ),
 
+          // Logout
           GestureDetector(
             onTap: () {
               Navigator.pushAndRemoveUntil(
@@ -151,18 +202,26 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
             child: Container(
-              height: 50,
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Row(
-                spacing: isShowLabel ? 10 : 0,
                 children: [
-                  Icon(UniconsLine.sign_in_alt, color: Colors.white),
-
-                  isShowLabel
-                      ? Text(
-                          'ອອກຈາກລະບົບ',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        )
-                      : SizedBox(),
+                  const Icon(
+                    UniconsLine.sign_in_alt,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  if (isShowLabel) ...[
+                    const SizedBox(width: 10),
+                    const Text(
+                      'ອອກຈາກລະບົບ',
+                      style: TextStyle(fontSize: 14, color: Colors.white),
+                    ),
+                  ],
                 ],
               ),
             ),

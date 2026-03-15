@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
-
 import 'package:purchaser_edge/providers/user_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
@@ -20,8 +19,7 @@ class UserManagementPage extends StatefulWidget {
 }
 
 class _UserManagementPageState extends State<UserManagementPage> {
-  final _horizontalController = ScrollController();
-  final _vericalController = ScrollController();
+  final _verticalController = ScrollController();
 
   String? roleSelected;
   String? branchSelected;
@@ -35,12 +33,12 @@ class _UserManagementPageState extends State<UserManagementPage> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['jpeg', 'png', 'jpg'],
-      allowMultiple: true,
+      allowMultiple: false,
     );
 
-    if (result != null) {
-      List<File> file = result.paths.map((path) => File(path!)).toList();
-      context.read<UserProvider>().addSignature(file);
+    if (result != null && result.files.single.path != null) {
+      File file = File(result.files.single.path!);
+      context.read<UserProvider>().setSignature(file);
     }
   }
 
@@ -54,449 +52,669 @@ class _UserManagementPageState extends State<UserManagementPage> {
             label: 'ຈັດການສິດຜູ້ໃຊ້',
             widget: GestureDetector(
               onTap: () {
-                showDialog(context: context, builder: (_) => _buildCreteUser());
+                showDialog(
+                  context: context,
+                  builder: (_) => _buildCreateUser(),
+                );
               },
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 height: 40,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   gradient: ColorService().mainGredientColor,
                 ),
                 child: Row(
-                  spacing: 10,
-                  children: [
+                  children: const [
                     Text('ເພີ່ມຜູ້ໃຊ້', style: TextStyle(color: Colors.white)),
+                    SizedBox(width: 10),
                     Icon(UniconsLine.plus, color: Colors.white),
                   ],
                 ),
               ),
             ),
           ),
-          Expanded(
-            child: Container(
-              margin: EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(10),
-                  bottomRight: Radius.circular(10),
-                ),
-              ),
 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Scrollbar(
-                      controller: _horizontalController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      scrollbarOrientation: ScrollbarOrientation.bottom,
-                      notificationPredicate: (notif) =>
-                          notif.metrics.axis == Axis.horizontal,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        controller: _vericalController,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          controller: _horizontalController,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minWidth: MediaQuery.of(context).size.width - 40,
-                            ),
-                            child: DataTable(
-                              headingRowColor: MaterialStateProperty.all(
-                                ColorService().primaryColor,
+          Expanded(
+            child: Scrollbar(
+              controller: _verticalController,
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: ListView.builder(
+                controller: _verticalController,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                itemCount: context.watch<UserProvider>().users.length,
+                itemBuilder: (context, index) {
+                  final userData = context.read<UserProvider>().users[index];
+                  final isOnline = userData.status == "online";
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 26,
+                                backgroundColor: ColorService().primaryColor
+                                    .withOpacity(0.15),
+                                child: Text(
+                                  userData.fullName.isNotEmpty
+                                      ? userData.fullName[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: ColorService().primaryColor,
+                                  ),
+                                ),
                               ),
-                              columns: [
-                                DataColumn(
-                                  label: Text(
-                                    'ຊື່ ແລະ ນາມສະກຸນ',
-                                    style: TextStyle(color: Colors.white),
+                              Positioned(
+                                bottom: 1,
+                                right: 1,
+                                child: Container(
+                                  width: 13,
+                                  height: 13,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isOnline
+                                        ? Colors.green
+                                        : ColorService().errorColor,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
                                   ),
                                 ),
-                                DataColumn(
-                                  label: Text(
-                                    'ຊື່ຜູ້ໃຊ້',
-                                    style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(width: 14),
+
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        userData.fullName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: ColorService().primaryColor
+                                            .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        userData.role,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: ColorService().primaryColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 4),
+
+                                Text(
+                                  '@${userData.username}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade500,
                                   ),
                                 ),
-                                DataColumn(
-                                  label: Text(
-                                    'ສິດຜູ້ໃຊ້',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'ສາຂາ',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'ຮັບຜິດຊອບກຸ່ມ',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'ສະຖານະ',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                DataColumn(
-                                  label: Text(
-                                    'ຈັດການ',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
+
+                                const SizedBox(height: 8),
+
+                                Row(
+                                  children: [
+                                    _infoChip(
+                                      UniconsLine.building,
+                                      userData.branch,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    _infoChip(
+                                      UniconsLine.users_alt,
+                                      userData.category,
+                                    ),
+                                  ],
                                 ),
                               ],
-
-                              rows: List.generate(
-                                context.watch<UserProvider>().users.length,
-                                (index) {
-                                  final userData = context
-                                      .read<UserProvider>()
-                                      .users[index];
-
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(Text(userData.fullName)),
-                                      DataCell(Text(userData.username)),
-                                      DataCell(Text(userData.role)),
-                                      DataCell(Text(userData.branch)),
-                                      DataCell(Text(userData.category)),
-                                      DataCell(
-                                        Container(
-                                          width: 20,
-                                          height: 20,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: userData.status == "online"
-                                                ? Colors.green
-                                                : ColorService().errorColor,
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Row(
-                                          spacing: 5,
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                context
-                                                    .read<UserProvider>()
-                                                    .deleteUser(userData.id);
-                                              },
-                                              child: Container(
-                                                width: 40,
-                                                height: 40,
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      ColorService().errorColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                ),
-                                                child: Center(
-                                                  child: Icon(
-                                                    UniconsLine.times_circle,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              width: 40,
-                                              height: 40,
-                                              decoration: BoxDecoration(
-                                                color:
-                                                    ColorService().primaryColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Center(
-                                                child: Icon(
-                                                  UniconsLine.info_circle,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
                             ),
                           ),
-                        ),
+
+                          const SizedBox(width: 10),
+
+                          Column(
+                            children: [
+                              GestureDetector(
+                                onTap: () {},
+                                child: Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: ColorService().primaryColor
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    UniconsLine.info_circle,
+                                    size: 18,
+                                    color: ColorService().primaryColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  context.read<UserProvider>().deleteUser(
+                                    userData.id,
+                                  );
+                                },
+                                child: Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: ColorService().errorColor
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    UniconsLine.times_circle,
+                                    size: 18,
+                                    color: ColorService().errorColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),
-          SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildCreteUser() {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Material(
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                width: 700,
+  Widget _infoChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.grey.shade500),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
 
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+  Widget _buildCreateUser() {
+    return StatefulBuilder(
+      builder: (context, setDialogState) {
+        final isManagerOrAbove =
+            roleSelected == "DISTRICT_MANAGER" ||
+            roleSelected == "DIRECTOR" ||
+            roleSelected == "PURCHASER_MANAGER";
+
+        // ✅ watch signature จาก provider
+        final signature = context.watch<UserProvider>().signature;
+        final hasSignature = signature != null;
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 40,
+            vertical: 24,
+          ),
+          child: Container(
+            width: 680,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 40,
+                  offset: const Offset(0, 16),
                 ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      width: double.infinity,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        gradient: ColorService().mainGredientColor,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(10),
-                          topRight: Radius.circular(10),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 18,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: ColorService().mainGredientColor,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          UniconsLine.user_plus,
+                          color: Colors.white,
+                          size: 18,
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Text(
-                            'ເພີ່ມຜູ້ໃຊ້ | ແກ້ໄຂ',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
+                      const SizedBox(width: 12),
+                      const Text(
+                        'ເພີ່ມ / ແກ້ໄຂຜູ້ໃຊ້',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: EdgeInsetsGeometry.all(20),
-                      child: Column(
+                    ],
+                  ),
+                ),
+
+                // Body
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _sectionLabel('ຂໍ້ມູນທົ່ວໄປ'),
+                      const SizedBox(height: 12),
+
+                      // Full name + signature picker
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Row(
-                            spacing: 5,
-                            children: [
-                              Expanded(
-                                child: TextFiledWidget(
-                                  label: 'ຊື່ ແລະ ນາມສະກຸນ',
-                                  isHidden: false,
-                                  controller: fullNameController,
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'ຊື່ ແລະ ນາມສະກຸນ',
+                              isHidden: false,
+                              controller: fullNameController,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () {
+                              pickSignatureFile();
+                              // ✅ บังคับ rebuild dialog หลัง pick
+                              setDialogState(() {});
+                            },
+                            child: Container(
+                              height: 42,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: hasSignature
+                                    ? ColorService().successColor.withOpacity(
+                                        0.1,
+                                      )
+                                    : ColorService().primaryColor.withOpacity(
+                                        0.08,
+                                      ),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: hasSignature
+                                      ? ColorService().successColor.withOpacity(
+                                          0.3,
+                                        )
+                                      : ColorService().primaryColor.withOpacity(
+                                          0.2,
+                                        ),
                                 ),
                               ),
-                              Column(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  SizedBox(height: 40),
-                                  GestureDetector(
-                                    onTap: () {
-                                      pickSignatureFile();
-                                    },
-                                    child: Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        gradient:
-                                            ColorService().mainGredientColor,
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                          UniconsLine.paperclip,
-                                          color: Colors.white,
-                                        ),
-                                      ),
+                                  Icon(
+                                    hasSignature
+                                        ? UniconsLine.check_circle
+                                        : UniconsLine.paperclip,
+                                    size: 16,
+                                    color: hasSignature
+                                        ? ColorService().successColor
+                                        : ColorService().primaryColor,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    hasSignature
+                                        ? 'ມີລາຍເຊັນແລ້ວ'
+                                        : 'ເພີ່ມລາຍເຊັນ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: hasSignature
+                                          ? ColorService().successColor
+                                          : ColorService().primaryColor,
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                          Row(
-                            spacing: 10,
-                            children: [
-                              Expanded(
-                                child: TextFiledWidget(
-                                  label: 'ຊື່ຜູ້ໃຊ້',
-                                  isHidden: false,
-                                  controller: usernameController,
-                                ),
-                              ),
-                              Expanded(
-                                child: TextFiledWidget(
-                                  label: 'ລະຫັດຜ່ານ',
-                                  isHidden: false,
-                                  controller: passwordControlelr,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            spacing: 10,
-                            children: [
-                              Expanded(
-                                child: DropDownWidget(
-                                  label: 'ສາຂາ',
-                                  items: [
-                                    'TCR_VTE',
-                                    'TCR_PAKSE01',
-                                    'TCR_PAKSE02',
-                                  ],
-                                  onChanged: (value) {
-                                    setState(() {
-                                      branchSelected = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                              Container(
-                                width: 300,
-                                child: DropDownWidget(
-                                  label: 'ສິດໃຊ້ງານ',
-                                  items: [
-                                    'IT',
-                                    'PURCHASER',
-                                    'PURCHASER_MANAGER',
-                                    'DISTRICT_MANAGER',
-                                    'DIRECTOR',
-                                  ],
-                                  onChanged: (value) {
-                                    setState(() {
-                                      roleSelected = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 10),
-                          roleSelected == "DISTRICT_MANAGER" ||
-                                  roleSelected == "DIRECTOR" ||
-                                  roleSelected == "PURCHASER_MANAGER"
-                              ? Container()
-                              : Row(
-                                  spacing: 10,
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: DropDownWidget(
-                                        label: 'ຮັບຜິດຊອບກຸ່ມ',
-                                        items: context
-                                            .read<DocumentProvider>()
-                                            .category,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            categorySelected = value;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                          SizedBox(height: 20),
-                          Row(
-                            spacing: 10,
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  context
-                                      .read<UserProvider>()
-                                      .signature
-                                      .clear();
-
-                                  Future.microtask(
-                                    () =>
-                                        mounted ? Navigator.pop(context) : null,
-                                  );
-                                },
-                                child: Container(
-                                  height: 40,
-                                  padding: EdgeInsets.symmetric(horizontal: 20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade500,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(child: Text('ຍົກເລີກ')),
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  final fullName = fullNameController.text
-                                      .trim();
-                                  final username = usernameController.text
-                                      .trim();
-                                  final password = passwordControlelr.text
-                                      .trim();
-                                  final branch = branchSelected;
-                                  final role = roleSelected;
-
-                                  context.read<UserProvider>().addUser(
-                                    fullName,
-                                    username,
-                                    password,
-                                    branch.toString(),
-                                    categorySelected.toString(),
-                                    role.toString(),
-                                  );
-
-                                  Future.microtask(
-                                    () =>
-                                        mounted ? Navigator.pop(context) : null,
-                                  );
-                                },
-                                child: Container(
-                                  height: 40,
-                                  padding: EdgeInsets.symmetric(horizontal: 20),
-                                  decoration: BoxDecoration(
-                                    gradient:
-                                        context
-                                                .watch<UserProvider>()
-                                                .signature
-                                                .length ==
-                                            0
-                                        ? LinearGradient(
-                                            colors: [
-                                              Colors.grey.shade500,
-                                              Colors.grey.shade500,
-                                            ],
-                                          )
-                                        : ColorService().mainGredientColor,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'ບັນທຶກ',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+
+                      const SizedBox(height: 12),
+
+                      // Username + Password
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'ຊື່ຜູ້ໃຊ້',
+                              isHidden: false,
+                              controller: usernameController,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'ລະຫັດຜ່ານ',
+                              isHidden: false,
+                              controller: passwordControlelr,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+                      Divider(color: Colors.grey.shade100, height: 1),
+                      const SizedBox(height: 20),
+
+                      _sectionLabel('ສິດ ແລະ ໂຄງສ້າງ'),
+                      const SizedBox(height: 12),
+
+                      // Branch + Role
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropDownWidget(
+                              label: 'ສາຂາ',
+                              items: const [
+                                'TCR_VTE',
+                                'TCR_PAKSE01',
+                                'TCR_PAKSE02',
+                              ],
+                              onChanged: (value) =>
+                                  setDialogState(() => branchSelected = value),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropDownWidget(
+                              label: 'ສິດໃຊ້ງານ',
+                              items: const [
+                                'IT',
+                                'PURCHASER',
+                                'PURCHASER_MANAGER',
+                                'DISTRICT_MANAGER',
+                                'DIRECTOR',
+                              ],
+                              onChanged: (value) =>
+                                  setDialogState(() => roleSelected = value),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (!isManagerOrAbove) ...[
+                        const SizedBox(height: 12),
+                        DropDownWidget(
+                          label: 'ຮັບຜິດຊອບກຸ່ມ',
+                          items: context.read<DocumentProvider>().category,
+                          onChanged: (value) =>
+                              setDialogState(() => categorySelected = value),
+                        ),
+                      ],
+
+                      const SizedBox(height: 24),
+
+                      // Signature warning
+                      if (!hasSignature)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                UniconsLine.exclamation_triangle,
+                                size: 16,
+                                color: Colors.orange.shade600,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'ກະລຸນາເພີ່ມລາຍເຊັນກ່ອນບັນທຶກ',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Cancel
+                          GestureDetector(
+                            onTap: () {
+                              context.read<UserProvider>().setSignature(null);
+                              Future.microtask(
+                                () => mounted ? Navigator.pop(context) : null,
+                              );
+                            },
+                            child: Container(
+                              height: 44,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    UniconsLine.times,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'ຍົກເລີກ',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 10),
+
+                          // ✅ Save — disable ถ้าไม่มี signature
+                          GestureDetector(
+                            onTap: hasSignature
+                                ? () async {
+                                    final response = await context
+                                        .read<UserProvider>()
+                                        .addUser(
+                                          fullNameController.text.trim(),
+                                          usernameController.text.trim(),
+                                          passwordControlelr.text.trim(),
+                                          branchSelected.toString(),
+                                          categorySelected.toString(),
+                                          roleSelected.toString(),
+                                        );
+
+                                    if (response != null &&
+                                        response.statusCode == 200) {
+                                      if (mounted) Navigator.pop(context);
+                                      fullNameController.text = '';
+                                      usernameController.text = '';
+                                      passwordControlelr.text = '';
+                                    }
+                                  }
+                                : null, // ✅ null = กดไม่ได้
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              height: 44,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: hasSignature
+                                    ? ColorService().mainGredientColor
+                                    : LinearGradient(
+                                        colors: [
+                                          Colors.grey.shade300,
+                                          Colors.grey.shade300,
+                                        ],
+                                      ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: hasSignature
+                                    ? [
+                                        BoxShadow(
+                                          color: ColorService().primaryColor
+                                              .withOpacity(0.3),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ]
+                                    : [],
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    UniconsLine.save,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'ບັນທຶກ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _sectionLabel(String label) {
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: ColorService().primaryColor,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade600,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
     );
   }
 }

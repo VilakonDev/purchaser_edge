@@ -21,7 +21,6 @@ import 'package:unicons/unicons.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global Thumbnail Render Queue
-// ป้องกันการ open PDF file เดียวกันพร้อมกันหลาย instance
 // ─────────────────────────────────────────────────────────────────────────────
 class _ThumbnailRenderQueue {
   static final _ThumbnailRenderQueue _instance =
@@ -29,10 +28,7 @@ class _ThumbnailRenderQueue {
   factory _ThumbnailRenderQueue() => _instance;
   _ThumbnailRenderQueue._internal();
 
-  // lock ต่อ filePath — ป้องกัน open file เดียวกันซ้อนกัน
   final Map<String, Future<void>> _fileLocks = {};
-
-  // global semaphore — render ได้สูงสุด 2 งานพร้อมกัน
   int _activeCount = 0;
   static const int _maxConcurrent = 2;
   final List<Completer<void>> _waitQueue = [];
@@ -42,7 +38,6 @@ class _ThumbnailRenderQueue {
     required int pageNumber,
     required int rotation,
   }) async {
-    // รอ global slot ว่าง
     while (_activeCount >= _maxConcurrent) {
       final c = Completer<void>();
       _waitQueue.add(c);
@@ -51,7 +46,6 @@ class _ThumbnailRenderQueue {
     _activeCount++;
 
     try {
-      // ใช้ lock ต่อ file เพื่อไม่ให้ open file เดียวกันพร้อมกัน
       final prev = _fileLocks[filePath] ?? Future.value();
       final myCompleter = Completer<void>();
       _fileLocks[filePath] = myCompleter.future;
@@ -76,25 +70,14 @@ class _ThumbnailRenderQueue {
   }
 
   Future<Uint8List?> _doRender(
-    String filePath,
-    int pageNumber,
-    int rotation,
-  ) async {
+      String filePath, int pageNumber, int rotation) async {
     pdfrx.PdfDocument? document;
     try {
       document = await pdfrx.PdfDocument.openFile(filePath);
-
       final int totalPages = document.pages.length;
-      if (pageNumber < 1 || pageNumber > totalPages) {
-        debugPrint(
-          '[Thumbnail] page $pageNumber out of range (total=$totalPages)',
-        );
-        return null;
-      }
+      if (pageNumber < 1 || pageNumber > totalPages) return null;
 
       final page = document.pages[pageNumber - 1];
-
-      // target ด้านยาวไม่เกิน 1200px
       const double targetLong = 1200.0;
       final double scale = page.width >= page.height
           ? targetLong / page.width
@@ -106,41 +89,35 @@ class _ThumbnailRenderQueue {
         fullWidth: imgW.toDouble(),
         fullHeight: imgH.toDouble(),
       );
-
       if (pageImage == null) return null;
 
-      // ✅ copy pixels ทันทีก่อน dispose
       final Uint8List pixelsCopy = Uint8List.fromList(pageImage.pixels);
       final int pw = pageImage.width;
       final int ph = pageImage.height;
 
-      // dispose document ก่อน heavy work
       document.dispose();
       document = null;
 
-      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
-        pixelsCopy,
-      );
-      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.raw(
+      final buffer = await ui.ImmutableBuffer.fromUint8List(pixelsCopy);
+      final descriptor = await ui.ImageDescriptor.raw(
         buffer,
         width: pw,
         height: ph,
         pixelFormat: ui.PixelFormat.rgba8888,
       );
-      final ui.Codec codec = await descriptor.instantiateCodec();
-      final ui.FrameInfo frameInfo = await codec.getNextFrame();
-      final ByteData? byteData = await frameInfo.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final codec = await descriptor.instantiateCodec();
+      final frameInfo = await codec.getNextFrame();
+      final byteData =
+          await frameInfo.image.toByteData(format: ui.ImageByteFormat.png);
       frameInfo.image.dispose();
       codec.dispose();
 
       if (byteData == null) return null;
 
-      final Uint8List pngBytes = byteData.buffer.asUint8List();
+      final pngBytes = byteData.buffer.asUint8List();
       return rotation == 0 ? pngBytes : await _rotateImage(pngBytes, rotation);
-    } catch (e, st) {
-      debugPrint('[Thumbnail] _doRender error page=$pageNumber: $e\n$st');
+    } catch (e) {
+      debugPrint('[Thumbnail] error page=$pageNumber: $e');
       return null;
     } finally {
       document?.dispose();
@@ -148,9 +125,9 @@ class _ThumbnailRenderQueue {
   }
 
   Future<Uint8List> _rotateImage(Uint8List src, int rotation) async {
-    final ui.Codec codec = await ui.instantiateImageCodec(src);
-    final ui.FrameInfo frame = await codec.getNextFrame();
-    final ui.Image img = frame.image;
+    final codec = await ui.instantiateImageCodec(src);
+    final frame = await codec.getNextFrame();
+    final img = frame.image;
     codec.dispose();
 
     final int w = img.width;
@@ -166,13 +143,11 @@ class _ThumbnailRenderQueue {
     canvas.translate(-w / 2, -h / 2);
     canvas.drawImage(img, Offset.zero, Paint());
 
-    final ui.Picture picture = recorder.endRecording();
-    final ui.Image rotated = await picture.toImage(cw, ch);
+    final picture = recorder.endRecording();
+    final rotated = await picture.toImage(cw, ch);
     img.dispose();
 
-    final ByteData? bd = await rotated.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
+    final bd = await rotated.toByteData(format: ui.ImageByteFormat.png);
     rotated.dispose();
     return bd!.buffer.asUint8List();
   }
@@ -256,7 +231,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<void> _loadFilesFromProvider(List<File> files) async {
     if (!mounted) return;
-
     if (files.isEmpty) {
       setState(() {
         pdfFiles.clear();
@@ -271,13 +245,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       try {
         final bytes = await file.readAsBytes();
         final doc = PdfDocument(inputBytes: bytes);
-        loaded.add(
-          PdfFileInfo(
-            filePath: file.path,
-            fileName: file.path.split('/').last,
-            pageCount: doc.pages.count,
-          ),
-        );
+        loaded.add(PdfFileInfo(
+          filePath: file.path,
+          fileName: file.path.split('/').last,
+          pageCount: doc.pages.count,
+        ));
         doc.dispose();
       } catch (e) {
         debugPrint('Error loading ${file.path}: $e');
@@ -316,16 +288,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     final Map<int, List<SignatureInfo>> copiedSignatures = {};
     pageSignatures.forEach((key, sigs) {
       copiedSignatures[key] = sigs
-          .map(
-            (s) => SignatureInfo(
-              imageBytes: Uint8List.fromList(s.imageBytes),
-              left: s.left,
-              top: s.top,
-              width: s.width,
-              height: s.height,
-              pageIndex: s.pageIndex,
-            ),
-          )
+          .map((s) => SignatureInfo(
+                imageBytes: Uint8List.fromList(s.imageBytes),
+                left: s.left,
+                top: s.top,
+                width: s.width,
+                height: s.height,
+                pageIndex: s.pageIndex,
+              ))
           .toList();
     });
 
@@ -348,44 +318,69 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // ========== Header ==========
+          // ── Header ──────────────────────────────────────────────
           Container(
             width: double.infinity,
             height: 60,
             decoration: BoxDecoration(
               gradient: ColorService().mainGredientColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            padding: EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Back
                 GestureDetector(
                   onTap: () => Future.microtask(
-                    () => mounted ? Navigator.pop(context) : null,
-                  ),
+                      () => mounted ? Navigator.pop(context) : null),
                   child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    height: 40,
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Colors.white.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.3)),
                     ),
                     child: Row(
-                      spacing: 10,
-                      children: [
-                        Icon(UniconsLine.arrow_left),
+                      children: const [
+                        Icon(UniconsLine.arrow_left,
+                            color: Colors.white, size: 18),
+                        SizedBox(width: 8),
                         Text(
                           'ກັບຄືນ',
-                          style: TextStyle(color: ColorService().mainTextColor),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
+
+                // Title
+                const Text(
+                  'ກວດສອບ ແລະ ເຊັນເອກະສານ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                // Right buttons
                 Row(
-                  spacing: 10,
                   children: [
-                    if (selectedPageIndex != null)
+                    if (selectedPageIndex != null) ...[
                       GestureDetector(
                         onTap: () {
                           pickSignatureFromUrl(
@@ -394,43 +389,76 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                           );
                         },
                         child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 20),
-                          height: 40,
+                          height: 38,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
+                            color: Colors.white.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.3)),
                           ),
                           child: Row(
-                            spacing: 10,
-                            children: [
+                            children: const [
+                              Icon(Icons.edit_road,
+                                  color: Colors.white, size: 16),
+                              SizedBox(width: 8),
                               Text(
                                 'ເພີ່ມລາຍເຊັນ',
-                                style: TextStyle(color: Colors.white),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                              Icon(Icons.edit_road, color: Colors.white),
                             ],
                           ),
                         ),
                       ),
+                      const SizedBox(width: 10),
+                    ],
                     GestureDetector(
                       onTap: _navigateToReview,
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
-                        height: 40,
+                        height: 38,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
                         decoration: BoxDecoration(
                           color: pdfFiles.isEmpty
-                              ? Colors.grey.shade300
-                              : Colors.green.shade300,
+                              ? Colors.white.withOpacity(0.15)
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(10),
+                          boxShadow: pdfFiles.isEmpty
+                              ? []
+                              : [
+                                  BoxShadow(
+                                    color:
+                                        Colors.black.withOpacity(0.1),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                         ),
                         child: Row(
-                          spacing: 10,
                           children: [
+                            Icon(
+                              UniconsLine.sign_out_alt,
+                              size: 16,
+                              color: pdfFiles.isEmpty
+                                  ? Colors.white.withOpacity(0.5)
+                                  : ColorService().primaryColor,
+                            ),
+                            const SizedBox(width: 8),
                             Text(
                               'ດຳເນີນການຕໍ່',
-                              style: TextStyle(color: Colors.white),
+                              style: TextStyle(
+                                color: pdfFiles.isEmpty
+                                    ? Colors.white.withOpacity(0.5)
+                                    : ColorService().primaryColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            Icon(UniconsLine.sign_out_alt, color: Colors.white),
                           ],
                         ),
                       ),
@@ -440,70 +468,129 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               ],
             ),
           ),
-          // ========== Body ==========
+
+          // ── Body ────────────────────────────────────────────────
           Expanded(
             child: Row(
               children: [
-                // ── Sidebar ──
+                // ── Sidebar ──────────────────────────────────────
                 Container(
                   width: 220,
                   decoration: BoxDecoration(
+                    color: Colors.white,
                     border: Border(
-                      right: BorderSide(color: Colors.grey.shade300, width: 1),
+                      right:
+                          BorderSide(color: Colors.grey.shade200),
                     ),
-                    color: Colors.grey.shade50,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(2, 0),
+                      ),
+                    ],
                   ),
                   child: Column(
                     children: [
+                      // Sidebar header
                       Container(
-                        padding: EdgeInsets.all(12),
-                        color: Colors.blue.shade50,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          border: Border(
+                            bottom: BorderSide(
+                                color: Colors.grey.shade200),
+                          ),
+                        ),
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.view_module,
-                              color: Colors.blue,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'ເອກະສານທັງໝົດ',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: ColorService()
+                                    .primaryColor
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                UniconsLine.layers,
+                                size: 14,
+                                color: ColorService().primaryColor,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'ໜ້າທັງໝົດ',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: ColorService().mainTextColor,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (allPages.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: ColorService()
+                                      .primaryColor
+                                      .withOpacity(0.1),
+                                  borderRadius:
+                                      BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${allPages.length}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: ColorService().primaryColor,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
+
                       Expanded(
                         child: pdfFiles.isEmpty
                             ? Center(
                                 child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
                                   children: [
-                                    Icon(
-                                      Icons.picture_as_pdf,
-                                      size: 40,
-                                      color: Colors.grey,
+                                    Container(
+                                      width: 52,
+                                      height: 52,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.picture_as_pdf_outlined,
+                                        size: 24,
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
-                                    SizedBox(height: 8),
+                                    const SizedBox(height: 10),
                                     Text(
                                       'ຍັງບໍ່ມີເອກະສານ',
                                       style: TextStyle(
-                                        color: Colors.grey,
+                                        color: Colors.grey.shade400,
                                         fontSize: 12,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
                                 ),
                               )
                             : ReorderableListView.builder(
-                                scrollController: _thumbnailScrollController,
-                                physics: ClampingScrollPhysics(),
-                                padding: EdgeInsets.all(8),
+                                scrollController:
+                                    _thumbnailScrollController,
+                                physics: const ClampingScrollPhysics(),
+                                padding: const EdgeInsets.all(8),
                                 itemCount: getAllPages().length,
                                 onReorder: _onReorder,
                                 itemBuilder: _buildThumbnailItem,
@@ -512,74 +599,104 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     ],
                   ),
                 ),
-                // ── Preview ──
+
+                // ── Preview ──────────────────────────────────────
                 Expanded(
                   child: pdfFiles.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.picture_as_pdf_outlined,
-                                size: 80,
-                                color: Colors.grey.shade300,
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.picture_as_pdf_outlined,
+                                  size: 36,
+                                  color: Colors.grey.shade300,
+                                ),
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
                                 'ບໍ່ມີເອກະສານ',
                                 style: TextStyle(
-                                  color: Colors.grey,
+                                  color: Colors.grey.shade400,
                                   fontSize: 16,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
                         )
                       : Container(
-                          color: Colors.grey.shade200,
+                          color: Colors.grey.shade100,
                           child: Center(
                             child: selectedPageIndex != null
                                 ? SinglePagePreview(
-                                    pageInfo: getAllPages()[selectedPageIndex!],
+                                    pageInfo: getAllPages()[
+                                        selectedPageIndex!],
                                     pageIndex: selectedPageIndex!,
-                                    rotation:
-                                        pageRotations[selectedPageIndex!] ?? 0,
-                                    signatures:
-                                        pageSignatures[selectedPageIndex!] ??
+                                    rotation: pageRotations[
+                                            selectedPageIndex!] ??
+                                        0,
+                                    signatures: pageSignatures[
+                                            selectedPageIndex!] ??
                                         [],
                                     onSignatureUpdate: (idx, s) {
                                       setState(() {
-                                        pageSignatures[selectedPageIndex!]![idx] =
-                                            s;
+                                        pageSignatures[selectedPageIndex!]![
+                                            idx] = s;
                                       });
                                     },
                                     onSignatureDelete: (idx) {
                                       setState(() {
                                         pageSignatures[selectedPageIndex!]!
                                             .removeAt(idx);
-                                        if (pageSignatures[selectedPageIndex!]!
+                                        if (pageSignatures[
+                                                selectedPageIndex!]!
                                             .isEmpty) {
                                           pageSignatures.remove(
-                                            selectedPageIndex!,
-                                          );
+                                              selectedPageIndex!);
                                         }
                                       });
                                     },
                                   )
                                 : Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
                                     children: [
-                                      Icon(
-                                        Icons.touch_app,
-                                        size: 80,
-                                        color: Colors.grey.shade400,
+                                      Container(
+                                        width: 72,
+                                        height: 72,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.touch_app,
+                                          size: 32,
+                                          color: Colors.grey.shade400,
+                                        ),
                                       ),
-                                      SizedBox(height: 16),
+                                      const SizedBox(height: 16),
                                       Text(
-                                        'ກົດເລືອກຫນ້າຈາກດ້ານຊ້າຍ',
+                                        'ກົດເລືອກໜ້າຈາກດ້ານຊ້າຍ',
                                         style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                          fontSize: 16,
+                                          color: Colors.grey.shade500,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'ເພື່ອກວດສອບ ຫຼື ເພີ່ມລາຍເຊັນ',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ],
@@ -609,12 +726,10 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
       int remap(int key) {
         if (key == oldIndex) return newIndex;
-        if (oldIndex < newIndex && key > oldIndex && key <= newIndex) {
+        if (oldIndex < newIndex && key > oldIndex && key <= newIndex)
           return key - 1;
-        }
-        if (oldIndex > newIndex && key >= newIndex && key < oldIndex) {
+        if (oldIndex > newIndex && key >= newIndex && key < oldIndex)
           return key + 1;
-        }
         return key;
       }
 
@@ -622,16 +737,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       pageSignatures.forEach((k, v) {
         final nk = remap(k);
         ns[nk] = v
-            .map(
-              (s) => SignatureInfo(
-                imageBytes: s.imageBytes,
-                left: s.left,
-                top: s.top,
-                width: s.width,
-                height: s.height,
-                pageIndex: nk,
-              ),
-            )
+            .map((s) => SignatureInfo(
+                  imageBytes: s.imageBytes,
+                  left: s.left,
+                  top: s.top,
+                  width: s.width,
+                  height: s.height,
+                  pageIndex: nk,
+                ))
             .toList();
       });
       pageSignatures = ns;
@@ -649,94 +762,107 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   Widget _buildThumbnailItem(BuildContext context, int index) {
     final pageInfo = getAllPages()[index];
     final bool isSelected = selectedPageIndex == index;
-    final bool hasSignature =
-        pageSignatures.containsKey(index) && pageSignatures[index]!.isNotEmpty;
+    final bool hasSignature = pageSignatures.containsKey(index) &&
+        pageSignatures[index]!.isNotEmpty;
 
     return GestureDetector(
       key: ValueKey('${pageInfo.filePath}_${pageInfo.pageNumber}'),
       onTap: () => setState(() => selectedPageIndex = index),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         key: _thumbnailKeys[index],
-        margin: EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? Colors.blue : Colors.grey.shade300,
+            color: isSelected
+                ? ColorService().primaryColor
+                : Colors.grey.shade200,
             width: isSelected ? 2 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
-              blurRadius: 2,
-              offset: Offset(0, 1),
+              color: isSelected
+                  ? ColorService().primaryColor.withOpacity(0.12)
+                  : Colors.black.withOpacity(0.04),
+              blurRadius: isSelected ? 8 : 4,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Column(
           children: [
-            // toolbar
+            // Toolbar
             Container(
-              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              padding: const EdgeInsets.symmetric(
+                  vertical: 6, horizontal: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? ColorService().primaryColor.withOpacity(0.05)
+                    : Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(9)),
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.drag_handle,
-                    color: Colors.grey.shade400,
-                    size: 20,
+                  Row(
+                    children: [
+                      Icon(Icons.drag_handle,
+                          color: Colors.grey.shade400, size: 18),
+                      if (hasSignature) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: ColorService()
+                                .primaryColor
+                                .withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit,
+                                  color: ColorService().primaryColor,
+                                  size: 10),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${pageSignatures[index]!.length}',
+                                style: TextStyle(
+                                  color: ColorService().primaryColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   Row(
                     children: [
-                      if (hasSignature)
-                        Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, color: Colors.blue, size: 14),
-                                SizedBox(width: 2),
-                                Text(
-                                  '${pageSignatures[index]!.length}',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      // rotate
+                      // Rotate
                       InkWell(
                         onTap: () => setState(() {
                           pageRotations[index] =
                               ((pageRotations[index] ?? 0) + 90) % 360;
                         }),
+                        borderRadius: BorderRadius.circular(6),
                         child: Container(
-                          padding: EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(4),
+                            color: Colors.blue.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Icon(
-                            Icons.rotate_right,
-                            color: Colors.blue,
-                            size: 18,
-                          ),
+                          child: Icon(Icons.rotate_right,
+                              color: Colors.blue.shade400, size: 16),
                         ),
                       ),
-                      SizedBox(width: 4),
-                      // delete
+                      const SizedBox(width: 4),
+                      // Delete
                       InkWell(
                         onTap: () => setState(() {
                           if (selectedPageIndex == index) {
@@ -748,33 +874,31 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                           allPages.removeAt(index);
                           pageSignatures.remove(index);
                           pageRotations.remove(index);
+
                           final us = <int, List<SignatureInfo>>{};
-                          pageSignatures.forEach(
-                            (k, v) => us[k > index ? k - 1 : k] = v,
-                          );
+                          pageSignatures.forEach((k, v) =>
+                              us[k > index ? k - 1 : k] = v);
                           pageSignatures = us;
+
                           final ur = <int, int>{};
-                          pageRotations.forEach(
-                            (k, v) => ur[k > index ? k - 1 : k] = v,
-                          );
+                          pageRotations.forEach((k, v) =>
+                              ur[k > index ? k - 1 : k] = v);
                           pageRotations = ur;
+
                           _pageKeys.remove(index);
                           _thumbnailKeys.remove(index);
                           _pageSizeCache.remove(
-                            '${pageInfo.filePath}_${pageInfo.pageNumber}',
-                          );
+                              '${pageInfo.filePath}_${pageInfo.pageNumber}');
                         }),
+                        borderRadius: BorderRadius.circular(6),
                         child: Container(
-                          padding: EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(4),
+                            color: Colors.red.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                            size: 18,
-                          ),
+                          child: Icon(Icons.delete_outline,
+                              color: Colors.red.shade400, size: 16),
                         ),
                       ),
                     ],
@@ -782,30 +906,41 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 ],
               ),
             ),
-            // thumbnail widget
+
+            // Thumbnail
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: OptimizedPdfThumbnail(
-                filePath: pageInfo.filePath,
-                pageNumber: pageInfo.pageNumber,
-                rotation: pageRotations[index] ?? 0,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 6),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: OptimizedPdfThumbnail(
+                  filePath: pageInfo.filePath,
+                  pageNumber: pageInfo.pageNumber,
+                  rotation: pageRotations[index] ?? 0,
+                ),
               ),
             ),
-            // label
+
+            // Label
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.blue.shade50 : Colors.white,
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
+                color: isSelected
+                    ? ColorService().primaryColor.withOpacity(0.05)
+                    : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(9)),
               ),
               child: Text(
-                'ຫນ້າ ${index + 1}',
+                'ໜ້າ ${index + 1}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? ColorService().primaryColor
+                      : Colors.grey.shade600,
                 ),
               ),
             ),
@@ -829,14 +964,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     int index = 0;
     for (var file in pdfFiles) {
       for (int i = 1; i <= file.pageCount; i++) {
-        allPages.add(
-          PageInfo(
-            filePath: file.filePath,
-            fileName: file.fileName,
-            pageNumber: i,
-            totalPages: file.pageCount,
-          ),
-        );
+        allPages.add(PageInfo(
+          filePath: file.filePath,
+          fileName: file.fileName,
+          pageNumber: i,
+          totalPages: file.pageCount,
+        ));
         _pageKeys[index] = GlobalKey();
         _thumbnailKeys[index] = GlobalKey();
         index++;
@@ -861,21 +994,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       if (response.statusCode != 200) return;
 
       final bytes = response.bodyBytes;
-
-      // decode image
-      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 800);
+      final codec =
+          await ui.instantiateImageCodec(bytes, targetWidth: 800);
       final frame = await codec.getNextFrame();
       final image = frame.image;
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
       final compressedBytes = byteData!.buffer.asUint8List();
       final double ar = image.width / image.height;
 
       if (selectedPageIndex != null && mounted) {
         final pageInfo = getAllPages()[selectedPageIndex!];
         final originalSize = await getPageSizeCached(
-          pageInfo.filePath,
-          pageInfo.pageNumber,
-        );
+            pageInfo.filePath, pageInfo.pageNumber);
         final rotation = pageRotations[selectedPageIndex!] ?? 0;
 
         Size rotatedSize = originalSize;
@@ -889,22 +1020,19 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
         setState(() {
           pageSignatures.putIfAbsent(selectedPageIndex!, () => []);
-          pageSignatures[selectedPageIndex!]!.add(
-            SignatureInfo(
-              imageBytes: compressedBytes,
-              left: 0.05,
-              top: 0.85,
-              width: sigWidth,
-              height: sigWidth / ar,
-              pageIndex: selectedPageIndex!,
-            ),
-          );
+          pageSignatures[selectedPageIndex!]!.add(SignatureInfo(
+            imageBytes: compressedBytes,
+            left: 0.05,
+            top: 0.85,
+            width: sigWidth,
+            height: sigWidth / ar,
+            pageIndex: selectedPageIndex!,
+          ));
         });
       }
-
       image.dispose();
     } catch (e) {
-      print("Failed to load signature from URL: $e");
+      debugPrint('Failed to load signature from URL: $e');
     }
   }
 
@@ -955,7 +1083,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           newPage.graphics.drawPdfTemplate(tmpl, Offset.zero, orig);
           break;
       }
-
       newPage.graphics.restore();
 
       if (pageSignatures.containsKey(i)) {
@@ -974,9 +1101,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
             sh = sig.width * a.height;
           }
           newPage.graphics.drawImage(
-            PdfBitmap(sig.imageBytes),
-            Rect.fromLTWH(sl, st, sw, sh),
-          );
+              PdfBitmap(sig.imageBytes), Rect.fromLTWH(sl, st, sw, sh));
         }
       }
 
@@ -1024,7 +1149,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OptimizedPdfThumbnail
+// OptimizedPdfThumbnail — ไม่แก้ logic เลย
 // ─────────────────────────────────────────────────────────────────────────────
 class OptimizedPdfThumbnail extends StatefulWidget {
   final String filePath;
@@ -1039,7 +1164,8 @@ class OptimizedPdfThumbnail extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<OptimizedPdfThumbnail> createState() => _OptimizedPdfThumbnailState();
+  State<OptimizedPdfThumbnail> createState() =>
+      _OptimizedPdfThumbnailState();
 }
 
 class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
@@ -1069,19 +1195,13 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
       '${widget.filePath}_${widget.pageNumber}_${widget.rotation}';
 
   void _startLoad() {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _hasError = false;
-      });
-    }
+    if (mounted) setState(() { _isLoading = true; _hasError = false; });
     _loadWithRetry();
   }
 
   Future<void> _loadWithRetry() async {
     final int myGen = _loadGeneration;
 
-    // ✅ ตรวจ cache ก่อน
     if (pdfThumbnailCache.containsKey(_cacheKey)) {
       if (!mounted || myGen != _loadGeneration) return;
       setState(() {
@@ -1092,61 +1212,43 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
       return;
     }
 
-    // ✅ exponential backoff retry: 0ms, 400ms, 1000ms, 2000ms
     const delays = [0, 400, 1000, 2000];
     for (int attempt = 0; attempt < delays.length; attempt++) {
       if (!mounted || myGen != _loadGeneration) return;
-
       if (delays[attempt] > 0) {
         await Future.delayed(Duration(milliseconds: delays[attempt]));
         if (!mounted || myGen != _loadGeneration) return;
       }
 
       try {
-        final Uint8List? result = await _thumbnailQueue.render(
+        final result = await _thumbnailQueue.render(
           filePath: widget.filePath,
           pageNumber: widget.pageNumber,
           rotation: widget.rotation,
         );
-
         if (!mounted || myGen != _loadGeneration) return;
-
         if (result != null) {
           pdfThumbnailCache[_cacheKey] = result;
-          setState(() {
-            _imageBytes = result;
-            _isLoading = false;
-            _hasError = false;
-          });
+          setState(() { _imageBytes = result; _isLoading = false; _hasError = false; });
           return;
         }
-
-        debugPrint(
-          '[Thumbnail] attempt ${attempt + 1} returned null — page ${widget.pageNumber}',
-        );
       } catch (e) {
-        debugPrint(
-          '[Thumbnail] attempt ${attempt + 1} threw — page ${widget.pageNumber}: $e',
-        );
+        debugPrint('[Thumbnail] attempt ${attempt + 1} threw: $e');
       }
     }
 
     if (!mounted || myGen != _loadGeneration) return;
-    setState(() {
-      _isLoading = false;
-      _hasError = true;
-    });
+    setState(() { _isLoading = false; _hasError = true; });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return SizedBox(
+      return const SizedBox(
         height: 160,
         child: Center(
           child: SizedBox(
-            width: 24,
-            height: 24,
+            width: 24, height: 24,
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
@@ -1160,15 +1262,14 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.broken_image_outlined, color: Colors.grey, size: 32),
-              SizedBox(height: 8),
+              Icon(Icons.broken_image_outlined,
+                  color: Colors.grey.shade400, size: 28),
+              const SizedBox(height: 8),
               GestureDetector(
-                onTap: () {
-                  _loadGeneration++;
-                  _startLoad();
-                },
+                onTap: () { _loadGeneration++; _startLoad(); },
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(6),
@@ -1177,12 +1278,11 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.refresh, size: 14, color: Colors.blue),
-                      SizedBox(width: 4),
-                      Text(
-                        'ລອງໃໝ່',
-                        style: TextStyle(fontSize: 11, color: Colors.blue),
-                      ),
+                      Icon(Icons.refresh, size: 12, color: Colors.blue.shade400),
+                      const SizedBox(width: 4),
+                      Text('ລອງໃໝ່',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.blue.shade400)),
                     ],
                   ),
                 ),
@@ -1206,7 +1306,7 @@ class _OptimizedPdfThumbnailState extends State<OptimizedPdfThumbnail> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SinglePagePreview
+// SinglePagePreview, OptimizedPdfPreview, SignatureOverlay — ไม่แก้เลย
 // ─────────────────────────────────────────────────────────────────────────────
 class SinglePagePreview extends StatelessWidget {
   final PageInfo pageInfo;
@@ -1232,22 +1332,21 @@ class SinglePagePreview extends StatelessWidget {
       future: _getPageSize(pageInfo.filePath, pageInfo.pageNumber),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         Size ps = snapshot.data!;
         double fw = rotation == 90 || rotation == 270 ? ps.height : ps.width;
         double fh = rotation == 90 || rotation == 270 ? ps.width : ps.height;
 
         return Padding(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: Container(
             decoration: BoxDecoration(
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: const Offset(0, 4)),
               ],
               border: Border.all(color: Colors.blue, width: 3),
             ),
@@ -1276,14 +1375,13 @@ class SinglePagePreview extends StatelessWidget {
                           ),
                         ),
                       ),
-                      ...signatures.asMap().entries.map(
-                        (e) => SignatureOverlay(
-                          signature: e.value,
-                          rotation: rotation,
-                          onUpdate: (s) => onSignatureUpdate(e.key, s),
-                          onDelete: () => onSignatureDelete(e.key),
-                        ),
-                      ),
+                      ...signatures.asMap().entries.map((e) =>
+                          SignatureOverlay(
+                            signature: e.value,
+                            rotation: rotation,
+                            onUpdate: (s) => onSignatureUpdate(e.key, s),
+                            onDelete: () => onSignatureDelete(e.key),
+                          )),
                     ],
                   ),
                 ),
@@ -1304,9 +1402,6 @@ class SinglePagePreview extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OptimizedPdfPreview
-// ─────────────────────────────────────────────────────────────────────────────
 class OptimizedPdfPreview extends StatefulWidget {
   final String filePath;
   final int pageNumber;
@@ -1353,8 +1448,9 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
 
   @override
   Widget build(BuildContext context) {
-    if (_controller == null) return Center(child: CircularProgressIndicator());
-
+    if (_controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return ClipRect(
       child: RotatedBox(
         quarterTurns: widget.rotation ~/ 90,
@@ -1362,8 +1458,7 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
           File(widget.filePath),
           controller: _controller!,
           key: ValueKey(
-            'preview_${widget.filePath}_${widget.pageNumber}_${widget.rotation}',
-          ),
+              'preview_${widget.filePath}_${widget.pageNumber}_${widget.rotation}'),
           enableDoubleTapZooming: false,
           enableTextSelection: false,
           canShowScrollHead: false,
@@ -1396,9 +1491,6 @@ class _OptimizedPdfPreviewState extends State<OptimizedPdfPreview> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SignatureOverlay
-// ─────────────────────────────────────────────────────────────────────────────
 class SignatureOverlay extends StatefulWidget {
   final SignatureInfo signature;
   final int rotation;
@@ -1437,8 +1529,7 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
     if (oldWidget.signature.left != widget.signature.left ||
         oldWidget.signature.top != widget.signature.top ||
         oldWidget.signature.width != widget.signature.width ||
-        oldWidget.signature.height != widget.signature.height ||
-        oldWidget.signature.pageIndex != widget.signature.pageIndex) {
+        oldWidget.signature.height != widget.signature.height) {
       setState(() {
         left = widget.signature.left;
         top = widget.signature.top;
@@ -1455,16 +1546,14 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
     image.dispose();
   }
 
-  void _push() => widget.onUpdate(
-    SignatureInfo(
-      imageBytes: widget.signature.imageBytes,
-      left: left,
-      top: top,
-      width: width,
-      height: height,
-      pageIndex: widget.signature.pageIndex,
-    ),
-  );
+  void _push() => widget.onUpdate(SignatureInfo(
+        imageBytes: widget.signature.imageBytes,
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+        pageIndex: widget.signature.pageIndex,
+      ));
 
   @override
   Widget build(BuildContext context) {
@@ -1478,14 +1567,10 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
               child: GestureDetector(
                 onPanUpdate: (d) {
                   setState(() {
-                    left = (left + d.delta.dx / constraints.maxWidth).clamp(
-                      0.0,
-                      1.0 - width,
-                    );
-                    top = (top + d.delta.dy / constraints.maxHeight).clamp(
-                      0.0,
-                      1.0 - height,
-                    );
+                    left = (left + d.delta.dx / constraints.maxWidth)
+                        .clamp(0.0, 1.0 - width);
+                    top = (top + d.delta.dy / constraints.maxHeight)
+                        .clamp(0.0, 1.0 - height);
                   });
                   _push();
                 },
@@ -1497,16 +1582,13 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                       Container(
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: Colors.blue.shade500,
-                            width: 2.5,
-                          ),
+                              color: Colors.blue.shade500, width: 2.5),
                           borderRadius: BorderRadius.circular(4),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.blue.withOpacity(0.15),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
+                                color: Colors.blue.withOpacity(0.15),
+                                blurRadius: 8,
+                                spreadRadius: 1),
                           ],
                         ),
                         child: ClipRRect(
@@ -1530,12 +1612,12 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                           onPanUpdate: (d) {
                             setState(() {
                               if (imageAspectRatio != null) {
-                                final dh = d.delta.dy / constraints.maxHeight;
-                                width = (width + dh * imageAspectRatio!).clamp(
-                                  0.03,
-                                  1.0 - left,
-                                );
-                                height = (height + dh).clamp(0.03, 1.0 - top);
+                                final dh =
+                                    d.delta.dy / constraints.maxHeight;
+                                width = (width + dh * imageAspectRatio!)
+                                    .clamp(0.03, 1.0 - left);
+                                height = (height + dh)
+                                    .clamp(0.03, 1.0 - top);
                               }
                             });
                             _push();
@@ -1545,17 +1627,16 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                             height: 20,
                             decoration: BoxDecoration(
                               color: Colors.blue.shade500,
-                              border: Border.all(color: Colors.white, width: 2),
+                              border: Border.all(
+                                  color: Colors.white, width: 2),
                               borderRadius: BorderRadius.circular(2),
                               boxShadow: [
-                                BoxShadow(color: Colors.black26, blurRadius: 4),
+                                BoxShadow(
+                                    color: Colors.black26, blurRadius: 4),
                               ],
                             ),
-                            child: Icon(
-                              Icons.unfold_more,
-                              size: 14,
-                              color: Colors.white,
-                            ),
+                            child: const Icon(Icons.unfold_more,
+                                size: 14, color: Colors.white),
                           ),
                         ),
                       ),
@@ -1565,15 +1646,13 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                         child: GestureDetector(
                           onTap: widget.onDelete,
                           child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
                                   Colors.blue.shade400,
-                                  Colors.blue.shade600,
+                                  Colors.blue.shade600
                                 ],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -1581,20 +1660,16 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.blue.withOpacity(0.4),
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2),
-                                ),
+                                    color: Colors.blue.withOpacity(0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2)),
                               ],
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.close_rounded,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
+                              children: const [
+                                Icon(Icons.close_rounded,
+                                    size: 14, color: Colors.white),
                                 SizedBox(width: 4),
                                 Text(
                                   'Remove',
@@ -1602,7 +1677,6 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
                                     color: Colors.white,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.3,
                                   ),
                                 ),
                               ],
@@ -1621,7 +1695,8 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
     );
   }
 
-  Widget _corner({double? top, double? bottom, double? left, double? right}) =>
+  Widget _corner(
+          {double? top, double? bottom, double? left, double? right}) =>
       Positioned(
         top: top,
         bottom: bottom,
@@ -1632,7 +1707,8 @@ class _SignatureOverlayState extends State<SignatureOverlay> {
           height: 12,
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: Colors.blue.shade500, width: 2),
+            border:
+                Border.all(color: Colors.blue.shade500, width: 2),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -1646,11 +1722,10 @@ class PdfFileInfo {
   final String filePath;
   final String fileName;
   final int pageCount;
-  PdfFileInfo({
-    required this.filePath,
-    required this.fileName,
-    required this.pageCount,
-  });
+  PdfFileInfo(
+      {required this.filePath,
+      required this.fileName,
+      required this.pageCount});
 }
 
 class PageInfo {
@@ -1658,24 +1733,22 @@ class PageInfo {
   final String fileName;
   final int pageNumber;
   final int totalPages;
-  PageInfo({
-    required this.filePath,
-    required this.fileName,
-    required this.pageNumber,
-    required this.totalPages,
-  });
+  PageInfo(
+      {required this.filePath,
+      required this.fileName,
+      required this.pageNumber,
+      required this.totalPages});
 }
 
 class SignatureInfo {
   final Uint8List imageBytes;
   final double left, top, width, height;
   final int pageIndex;
-  SignatureInfo({
-    required this.imageBytes,
-    required this.left,
-    required this.top,
-    required this.width,
-    required this.height,
-    required this.pageIndex,
-  });
+  SignatureInfo(
+      {required this.imageBytes,
+      required this.left,
+      required this.top,
+      required this.width,
+      required this.height,
+      required this.pageIndex});
 }
