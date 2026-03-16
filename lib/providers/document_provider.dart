@@ -107,6 +107,19 @@ class DocumentProvider extends ChangeNotifier {
     return _documents.where((doc) => doc.documentCategory == category).toList();
   }
 
+  List<DocumentModel> showDocumentByOfficerCategoryAndStatus(
+    String category,
+    String status,
+  ) {
+    final docs = showDocumentByOfficerCategory(category);
+
+    if (status == "All") {
+      return docs;
+    }
+
+    return docs.where((doc) => doc.status == status).toList();
+  }
+
   List<MonthlyBuyModel> getMonthlyBuy() {
     List<MonthlyBuyModel> result = [];
 

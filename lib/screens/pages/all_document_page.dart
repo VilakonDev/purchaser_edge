@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/model/document_model.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
@@ -21,6 +22,7 @@ class AllDocumentPage extends StatefulWidget {
 class _AllDocumentPageState extends State<AllDocumentPage> {
   final ScrollController _verticalController = ScrollController();
   String selectedDocumentCategory = 'ທັງຫມົດ';
+  int selectedStatus = 0;
 
   @override
   void dispose() {
@@ -28,18 +30,36 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
     super.dispose();
   }
 
+  /// กรอง documents ตาม selectedStatus
+  /// 0 = ທັງໝົດ, 1 = ລໍຖ້າ (PENDING + DM_APPROVED), 2 = ອະນຸມັດແລ້ວ (DIRECTOR_APPROVED)
+  List<DocumentModel> _filterByStatus(List<DocumentModel> docs) {
+    switch (selectedStatus) {
+      case 1:
+        return docs
+            .where((d) => d.status == "PENDING" || d.status == "DM_APPROVED")
+            .toList();
+      case 2:
+        return docs.where((d) => d.status == "DIRECTOR_APPROVED").toList();
+      default:
+        return docs;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = context.read<AuthProvider>().currentUser!;
     final isPurchaser = currentUser.role == "PURCHASER";
 
-    final documents = isPurchaser
+    // ดึง docs ทั้งหมดก่อน แล้วค่อย filter status ทีหลัง
+    final allDocs = isPurchaser
         ? context.watch<DocumentProvider>().showDocumentByOfficerCategory(
             currentUser.category,
           )
         : context.watch<DocumentProvider>().showAllDocuments(
             selectedDocumentCategory,
           );
+
+    final documents = _filterByStatus(allDocs);
 
     final fileLauncher = context.read<FileProvider>();
 
@@ -60,32 +80,39 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                   ],
                   const SizedBox(height: 20),
 
-                  // Summary chips
+                  // Summary chips — 3 อัน
                   Row(
                     children: [
                       _summaryChip(
                         icon: UniconsLine.file_alt,
                         label: 'ທັງໝົດ',
-                        count: documents.length,
+                        count: allDocs.length,
                         color: ColorService().primaryColor,
+                        index: 0,
                       ),
                       const SizedBox(width: 10),
                       _summaryChip(
                         icon: UniconsLine.clock,
                         label: 'ລໍຖ້າ',
-                        count: documents
-                            .where((d) => d.status == "PENDING")
+                        count: allDocs
+                            .where(
+                              (d) =>
+                                  d.status == "PENDING" ||
+                                  d.status == "DM_APPROVED",
+                            )
                             .length,
                         color: Colors.orange,
+                        index: 1,
                       ),
                       const SizedBox(width: 10),
                       _summaryChip(
                         icon: UniconsLine.check_circle,
-                        label: 'ອະນຸມັດ',
-                        count: documents
-                            .where((d) => d.status != "PENDING")
+                        label: 'ອະນຸມັດແລ້ວ',
+                        count: allDocs
+                            .where((d) => d.status == "DIRECTOR_APPROVED")
                             .length,
                         color: ColorService().successColor,
+                        index: 2,
                       ),
                     ],
                   ),
@@ -101,10 +128,13 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                             controller: _verticalController,
                             itemCount: documents.length,
                             shrinkWrap: true,
-                            physics: NeverScrollableScrollPhysics(),
+                            physics: const NeverScrollableScrollPhysics(),
                             itemBuilder: (context, index) {
                               final doc = documents[index];
                               final isPending = doc.status == "PENDING";
+                              final isDmApproved =
+                                  doc.status == "DM_APPROVED" ||
+                                  doc.status == "DIRECTOR_APPROVED";
                               final isDirectorApproved =
                                   doc.status == "DIRECTOR_APPROVED";
 
@@ -156,7 +186,6 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            // Title + doc number
                                             Row(
                                               children: [
                                                 Expanded(
@@ -201,7 +230,6 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
 
                                             const SizedBox(height: 8),
 
-                                            // Meta chips row
                                             Wrap(
                                               spacing: 6,
                                               runSpacing: 6,
@@ -229,16 +257,13 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
 
                                             const SizedBox(height: 10),
 
-                                            // Status row
                                             Row(
                                               children: [
-                                                // DM status
                                                 _statusBadge(
                                                   label: 'ຜູ້ຈັດການ',
-                                                  approved: !isPending,
+                                                  approved: isDmApproved,
                                                 ),
                                                 const SizedBox(width: 8),
-                                                // Director status
                                                 _statusBadge(
                                                   label: 'ຜູ້ບໍລິຫານ',
                                                   approved: isDirectorApproved,
@@ -306,44 +331,42 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
     required String label,
     required int count,
     required Color color,
+    required int index,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
+    final isSelected = selectedStatus == index;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedStatus = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.2) : color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : color.withOpacity(0.15),
           ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$count',
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+                fontSize: 12,
                 color: color,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text("$count",style: TextStyle(color: color),),
+          ],
+        ),
       ),
     );
   }

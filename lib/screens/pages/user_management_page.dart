@@ -613,24 +613,16 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           GestureDetector(
                             onTap: hasSignature
                                 ? () async {
-                                    final response = await context
-                                        .read<UserProvider>()
-                                        .addUser(
-                                          fullNameController.text.trim(),
-                                          usernameController.text.trim(),
-                                          passwordControlelr.text.trim(),
-                                          branchSelected.toString(),
-                                          categorySelected.toString(),
-                                          roleSelected.toString(),
-                                        );
+                                    await context.read<UserProvider>().addUser(
+                                      fullNameController.text.trim(),
+                                      usernameController.text.trim(),
+                                      passwordControlelr.text.trim(),
+                                      branchSelected.toString(),
+                                      categorySelected.toString(),
+                                      roleSelected.toString(),
+                                    );
 
-                                    if (response != null &&
-                                        response.statusCode == 200) {
-                                      if (mounted) Navigator.pop(context);
-                                      fullNameController.text = '';
-                                      usernameController.text = '';
-                                      passwordControlelr.text = '';
-                                    }
+                                    if (mounted) Navigator.pop(context);
                                   }
                                 : null, // ✅ null = กดไม่ได้
                             child: AnimatedContainer(

@@ -309,7 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: Colors.white70),
@@ -327,16 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _fieldLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: Color(0xFF374151),
-      ),
-    );
-  }
+  
 
   Future<void> _handleLogin() async {
     final username = usernameController.text.trim();
