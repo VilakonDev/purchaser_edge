@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:provider/provider.dart';
@@ -161,6 +162,14 @@ class ReviewScreen extends StatelessWidget {
   // ─────────────────────────────────────────────────────────────────────────
   // Upload document
   // ─────────────────────────────────────────────────────────────────────────
+  http.Client _createNgrokClient() {
+    final ioClient = HttpClient();
+    ioClient.badCertificateCallback = (_, __, ___) => true;
+    ioClient.connectionTimeout = const Duration(seconds: 30);
+    return IOClient(ioClient);
+  }
+
+  // ── Upload Document ───────────────────────────────────────────────────────────
   Future<void> _uploadDocument(BuildContext context) async {
     showDialog(
       context: context,
@@ -190,6 +199,8 @@ class ReviewScreen extends StatelessWidget {
       ),
     );
 
+    final client = _createNgrokClient(); // ✅ สร้าง client ก่อน try
+
     try {
       final pdfBytes = await _buildMergedPdf();
 
@@ -200,18 +211,22 @@ class ReviewScreen extends StatelessWidget {
       await tempFile.writeAsBytes(pdfBytes);
 
       final uri = Uri.parse('${UrlService().baseUrl}/documents/upload');
-      final request = http.MultipartRequest('POST', uri);
 
-      request.fields['document_number'] =
-          context.read<DocumentProvider>().documentNumber ?? '';
-      request.fields['document_title'] =
-          context.read<DocumentProvider>().documentTitle ?? '';
-      request.fields['branch'] = context.read<DocumentProvider>().branch ?? '';
-      request.fields['category'] =
-          context.read<DocumentProvider>().documentCategory ?? '';
-      request.fields['status'] = 'pending';
-      request.fields['created_by'] =
-          context.read<DocumentProvider>().createBy ?? '';
+      final request = http.MultipartRequest('POST', uri)
+        // ✅ ngrok headers — ข้าม browser warning page
+        ..headers['ngrok-skip-browser-warning'] = 'true'
+        ..headers['User-Agent'] = 'PurchaserEdgeApp/1.0'
+        // fields เหมือนเดิม
+        ..fields['document_number'] =
+            context.read<DocumentProvider>().documentNumber ?? ''
+        ..fields['document_title'] =
+            context.read<DocumentProvider>().documentTitle ?? ''
+        ..fields['branch'] = context.read<DocumentProvider>().branch ?? ''
+        ..fields['category'] =
+            context.read<DocumentProvider>().documentCategory ?? ''
+        ..fields['status'] = 'pending'
+        ..fields['created_by'] =
+            context.read<DocumentProvider>().createBy ?? '';
 
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -222,7 +237,8 @@ class ReviewScreen extends StatelessWidget {
         ),
       );
 
-      final streamedResponse = await request.send();
+      // ✅ ส่งผ่าน client ที่ bypass SSL แทน request.send() โดยตรง
+      final streamedResponse = await client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
       await tempFile.delete();
@@ -309,6 +325,8 @@ class ReviewScreen extends StatelessWidget {
       if (context.mounted) {
         _showErrorDialog(context, 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
       }
+    } finally {
+      client.close(); // ✅ ปิด client เสมอไม่ว่า success หรือ error
     }
   }
 
