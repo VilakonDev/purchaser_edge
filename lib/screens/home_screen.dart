@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(UniconsLine.user_circle, size: 14),
                       const SizedBox(width: 6),
                       Text(
-                        '${currentUser.fullName}',
+                        currentUser.fullName,
                         style: TextStyle(
                           color: ColorService().mainTextColor,
                           fontWeight: FontWeight.w600,
@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Icon(
                         isShowLabel
-                            ? UniconsLine.left_arrow_to_left
+                            ? UniconsLine.bars
                             : UniconsLine.bars,
                         color: Colors.white,
                         size: 20,

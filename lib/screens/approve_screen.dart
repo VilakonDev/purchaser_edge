@@ -8,7 +8,9 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
-import 'package:purchaser_edge/providers/document_provider.dart';
+import 'package:purchaser_edge/providers/user_provider.dart';
+import 'package:purchaser_edge/services/send_email_service.dart';
+
 import 'package:purchaser_edge/services/url_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -21,16 +23,22 @@ class ApproveScreen extends StatefulWidget {
   final ReviewDocumentData? documentData;
   final String? fileName;
   final String? documentId;
+  final String? documentNumber;
+  final String? documentTitle;
+  final String? creatorEmail;
 
   const ApproveScreen({
     super.key,
     this.documentData,
     this.fileName,
+    this.documentNumber,
+    this.documentTitle,
     this.documentId,
+    this.creatorEmail,
   }) : assert(
-          documentData != null || fileName != null,
-          'ต้องส่ง documentData หรือ fileName อย่างใดอย่างหนึ่ง',
-        );
+         documentData != null || fileName != null,
+         'ต้องส่ง documentData หรือ fileName อย่างใดอย่างหนึ่ง',
+       );
 
   @override
   State<ApproveScreen> createState() => _ApproveScreenState();
@@ -66,14 +74,16 @@ class _ApproveScreenState extends State<ApproveScreen> {
     pageSignatures = {};
     data.pageSignatures.forEach((key, sigs) {
       pageSignatures[key] = sigs
-          .map((s) => SignatureInfo(
-                imageBytes: Uint8List.fromList(s.imageBytes),
-                left: s.left,
-                top: s.top,
-                width: s.width,
-                height: s.height,
-                pageIndex: s.pageIndex,
-              ))
+          .map(
+            (s) => SignatureInfo(
+              imageBytes: Uint8List.fromList(s.imageBytes),
+              left: s.left,
+              top: s.top,
+              width: s.width,
+              height: s.height,
+              pageIndex: s.pageIndex,
+            ),
+          )
           .toList();
     });
   }
@@ -90,7 +100,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
 
       if (response.statusCode != 200) {
         throw Exception(
-            'ດາວໂຫຼດບໍ່ສຳເລັດ: ${response.statusCode} ${widget.fileName}');
+          'ດາວໂຫຼດບໍ່ສຳເລັດ: ${response.statusCode} ${widget.fileName}',
+        );
       }
 
       final tempDir = await getTemporaryDirectory();
@@ -154,8 +165,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       final frame = await codec.getNextFrame();
       final image = frame.image;
 
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final compressedBytes = byteData!.buffer.asUint8List();
       double aspectRatio = image.width / image.height;
 
@@ -163,7 +173,9 @@ class _ApproveScreenState extends State<ApproveScreen> {
 
       final pageInfo = pages[selectedPageIndex!];
       final originalSize = await _getPageSizeCached(
-          pageInfo.filePath, pageInfo.pageNumber);
+        pageInfo.filePath,
+        pageInfo.pageNumber,
+      );
       final rotation = pageRotations[selectedPageIndex!] ?? 0;
 
       Size rotatedSize = originalSize;
@@ -181,14 +193,16 @@ class _ApproveScreenState extends State<ApproveScreen> {
 
       setState(() {
         pageSignatures.putIfAbsent(selectedPageIndex!, () => []);
-        pageSignatures[selectedPageIndex!]!.add(SignatureInfo(
-          imageBytes: compressedBytes,
-          left: 0.05,
-          top: 0.85,
-          width: sigWidth,
-          height: sigHeight,
-          pageIndex: selectedPageIndex!,
-        ));
+        pageSignatures[selectedPageIndex!]!.add(
+          SignatureInfo(
+            imageBytes: compressedBytes,
+            left: 0.05,
+            top: 0.85,
+            width: sigWidth,
+            height: sigHeight,
+            pageIndex: selectedPageIndex!,
+          ),
+        );
       });
 
       image.dispose();
@@ -273,7 +287,9 @@ class _ApproveScreenState extends State<ApproveScreen> {
             sh = sig.width * a.height;
           }
           newPage.graphics.drawImage(
-              PdfBitmap(sig.imageBytes), Rect.fromLTWH(sl, st, sw, sh));
+            PdfBitmap(sig.imageBytes),
+            Rect.fromLTWH(sl, st, sw, sh),
+          );
         }
       }
 
@@ -288,8 +304,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
 
     final PdfDocument mergedDoc = PdfDocument();
     for (int i = 0; i < pageBytesList.length; i++) {
-      final PdfDocument srcDoc =
-          PdfDocument(inputBytes: pageBytesList[i]);
+      final PdfDocument srcDoc = PdfDocument(inputBytes: pageBytesList[i]);
       final PdfPage srcPage = srcDoc.pages[0];
       final Size srcSize = srcPage.size;
 
@@ -325,10 +340,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
       context.read<AuthProvider>().currentUser!.role == "DISTRICT_MANAGER"
           ? await _approveDocumentByDM()
           : context.read<AuthProvider>().currentUser!.role == "DIRECTOR"
-              ? await _approveDocumentByDirector()
-              : setState(() {});
+          ? await _approveDocumentByDirector()
+          : setState(() {});
     } else {
-      await _uploadDocument();
+      return;
     }
   }
 
@@ -338,34 +353,56 @@ class _ApproveScreenState extends State<ApproveScreen> {
       final pdfBytes = await _buildMergedPdf();
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
-          '${tempDir.path}/approved_${DateTime.now().millisecondsSinceEpoch}.pdf');
+        '${tempDir.path}/approved_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
       await tempFile.writeAsBytes(pdfBytes);
 
       final uri = Uri.parse(
-          '${UrlService().baseUrl}/documents/dmApprove/${widget.documentId}');
+        '${UrlService().baseUrl}/documents/dmApprove/${widget.documentId}',
+      );
       final request = http.MultipartRequest('POST', uri);
-      request.files.add(await http.MultipartFile.fromPath(
-          'file', tempFile.path,
-          filename: widget.fileName ?? 'approved.pdf'));
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          tempFile.path,
+          filename: widget.fileName ?? 'approved.pdf',
+        ),
+      );
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       await tempFile.delete();
 
-      if (context.mounted)
+      if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
+      }
 
       if (response.statusCode == 200) {
         _showSuccessDialog('Approve ເອກະສານສຳເລັດ!', popCount: 1);
+
+        SendEmailService().sendEmail(
+          widget.creatorEmail.toString(),
+          'District Manager',
+          'เอกสาร ${widget.documentNumber} เรื่อง : ${widget.documentTitle} ถูกอนุมัติแล้ว',
+        );
+
+        SendEmailService().sendEmail(
+          context.read<UserProvider>().directorsEmail,
+          'District Manager',
+          'มีเอกสาร ${widget.documentNumber} เรื่อง : ${widget.documentTitle} รออนุมัติ',
+        );
       } else {
         _showErrorDialog(
-            'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}');
+          'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}',
+        );
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-      if (context.mounted)
+      }
+      if (context.mounted) {
         _showErrorDialog('ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
+      }
     }
   }
 
@@ -375,86 +412,48 @@ class _ApproveScreenState extends State<ApproveScreen> {
       final pdfBytes = await _buildMergedPdf();
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(
-          '${tempDir.path}/approved_${DateTime.now().millisecondsSinceEpoch}.pdf');
+        '${tempDir.path}/approved_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
       await tempFile.writeAsBytes(pdfBytes);
 
       final uri = Uri.parse(
-          '${UrlService().baseUrl}/documents/directorApprove/${widget.documentId}');
+        '${UrlService().baseUrl}/documents/directorApprove/${widget.documentId}',
+      );
       final request = http.MultipartRequest('POST', uri);
-      request.files.add(await http.MultipartFile.fromPath(
-          'file', tempFile.path,
-          filename: widget.fileName ?? 'approved.pdf'));
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          tempFile.path,
+          filename: widget.fileName ?? 'approved.pdf',
+        ),
+      );
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
       await tempFile.delete();
 
-      if (context.mounted)
+      if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
+      }
 
       if (response.statusCode == 200) {
         _showSuccessDialog('Approve ເອກະສານສຳເລັດ!', popCount: 1);
+
+        SendEmailService().sendEmail(
+          widget.creatorEmail.toString(),
+          'Director',
+          'เอกสาร ${widget.documentNumber} เรื่อง : ${widget.documentTitle} ถูกอนุมัติแล้ว',
+        );
       } else {
-        debugPrint(
-            'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}');
+        debugPrint('ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}');
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
-      if (context.mounted)
-        _showErrorDialog('ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
-    }
-  }
-
-  Future<void> _uploadDocument() async {
-    _showLoadingDialog('ກຳລັງສົ່ງເອກະສານ...');
-    try {
-      final pdfBytes = await _buildMergedPdf();
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-          '${tempDir.path}/upload_${DateTime.now().millisecondsSinceEpoch}.pdf');
-      await tempFile.writeAsBytes(pdfBytes);
-
-      final uri = Uri.parse('${UrlService().baseUrl}/documents/upload');
-      final request = http.MultipartRequest('POST', uri);
-
-      final docProvider = context.read<DocumentProvider>();
-      request.fields['document_number'] = docProvider.documentNumber ?? '';
-      request.fields['document_title'] = docProvider.documentTitle ?? '';
-      request.fields['branch'] = docProvider.branch ?? '';
-      request.fields['category'] = docProvider.documentCategory ?? '';
-      request.fields['status'] = 'pending';
-      request.fields['created_by'] = docProvider.createBy ?? '';
-      request.files.add(await http.MultipartFile.fromPath(
-        'file',
-        tempFile.path,
-        filename:
-            '${docProvider.documentTitle?.replaceAll(' ', '_') ?? 'document'}_${DateTime.now().millisecondsSinceEpoch}.pdf',
-      ));
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      await tempFile.delete();
-
-      if (context.mounted)
-        Navigator.of(context, rootNavigator: true).pop();
-
-      if (response.statusCode == 200) {
-        if (context.mounted) {
-          docProvider.resetDocumentInfo();
-          _showSuccessDialog('ສົ່ງເອກະສານສຳເລັດ!', popCount: 2);
-        }
-      } else {
-        if (context.mounted) {
-          _showErrorDialog(
-              'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}');
-        }
       }
-    } catch (e) {
-      if (context.mounted)
-        Navigator.of(context, rootNavigator: true).pop();
-      if (context.mounted)
+      if (context.mounted) {
         _showErrorDialog('ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
+      }
     }
   }
 
@@ -467,7 +466,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
         child: Dialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -475,9 +475,13 @@ class _ApproveScreenState extends State<ApproveScreen> {
               children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 20),
-                Text(message,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w500)),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -491,8 +495,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       context: context,
       builder: (_) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
@@ -502,15 +505,23 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    shape: BoxShape.circle),
-                child: const Icon(Icons.check_rounded,
-                    color: Colors.green, size: 36),
+                  color: Colors.green.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.green,
+                  size: 36,
+                ),
               ),
               const SizedBox(height: 16),
-              Text(message,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -518,7 +529,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   onPressed: () {
@@ -527,9 +539,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
                       Navigator.of(context).pop();
                     }
                   },
-                  child: const Text('ກັບສູ່ໜ້າຫຼັກ',
-                      style: TextStyle(
-                          color: Colors.white, fontSize: 15)),
+                  child: const Text(
+                    'ກັບສູ່ໜ້າຫຼັກ',
+                    style: TextStyle(color: Colors.white, fontSize: 15),
+                  ),
                 ),
               ),
             ],
@@ -544,8 +557,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
       context: context,
       builder: (_) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
@@ -555,19 +567,26 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                    color: Colors.red.shade50, shape: BoxShape.circle),
-                child: const Icon(Icons.error_outline,
-                    color: Colors.red, size: 36),
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 36,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text('ເກີດຂໍ້ຜິດພາດ',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'ເກີດຂໍ້ຜິດພາດ',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              Text(message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.grey.shade600, fontSize: 13)),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -575,14 +594,16 @@ class _ApproveScreenState extends State<ApproveScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   onPressed: () =>
                       Navigator.of(context, rootNavigator: true).pop(),
-                  child: const Text('ປິດ',
-                      style: TextStyle(
-                          color: Colors.white, fontSize: 15)),
+                  child: const Text(
+                    'ປິດ',
+                    style: TextStyle(color: Colors.white, fontSize: 15),
+                  ),
                 ),
               ),
             ],
@@ -599,6 +620,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
         body: Column(
           children: [
             _buildHeader(),
+
             Expanded(
               child: Center(
                 child: Column(
@@ -606,9 +628,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    Text('ກຳລັງດາວໂຫຼດເອກະສານ...',
-                        style: TextStyle(
-                            color: Colors.grey, fontSize: 15)),
+                    Text(
+                      'ກຳລັງດາວໂຫຼດເອກະສານ...',
+                      style: TextStyle(color: Colors.grey, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -628,19 +651,28 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.error_outline,
-                        size: 64, color: Colors.red.shade300),
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red.shade300,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('ບໍ່ສາມາດໂຫຼດເອກະສານໄດ້',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold)),
+                    const Text(
+                      'ບໍ່ສາມາດໂຫຼດເອກະສານໄດ້',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text(_loadError!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13)),
+                    Text(
+                      _loadError!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
                       onPressed: _downloadAndLoadFile,
@@ -666,12 +698,16 @@ class _ApproveScreenState extends State<ApproveScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.picture_as_pdf_outlined,
-                            size: 80, color: Colors.grey.shade300),
+                        Icon(
+                          Icons.picture_as_pdf_outlined,
+                          size: 80,
+                          color: Colors.grey.shade300,
+                        ),
                         const SizedBox(height: 16),
-                        Text('ບໍ່ມີເອກະສານສຳລັບກວດສອບ',
-                            style: TextStyle(
-                                color: Colors.grey, fontSize: 16)),
+                        Text(
+                          'ບໍ່ມີເອກະສານສຳລັບກວດສອບ',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
                       ],
                     ),
                   )
@@ -718,29 +754,33 @@ class _ApproveScreenState extends State<ApproveScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: Colors.white.withOpacity(0.3)),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
               ),
               child: Row(
                 children: const [
-                  Icon(UniconsLine.arrow_left,
-                      color: Colors.white, size: 18),
+                  Icon(UniconsLine.arrow_left, color: Colors.white, size: 18),
                   SizedBox(width: 8),
-                  Text('ກັບຄືນ',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500)),
+                  Text(
+                    'ກັບຄືນ',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
 
-          Text(title,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
 
           Row(
             children: [
@@ -748,8 +788,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 GestureDetector(
                   onTap: () {
                     _pickSignatureFromUrl(
-                      UrlService().baseUrl +
-                          '/signature/${context.read<AuthProvider>().currentUser!.fileSignature}',
+                      '${UrlService().baseUrl}/signature/${context.read<AuthProvider>().currentUser!.fileSignature}',
                     );
                   },
                   child: Container(
@@ -758,19 +797,20 @@ class _ApproveScreenState extends State<ApproveScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.3)),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
                     child: Row(
                       children: const [
-                        Icon(Icons.edit_road,
-                            color: Colors.white, size: 16),
+                        Icon(Icons.edit_road, color: Colors.white, size: 16),
                         SizedBox(width: 8),
-                        Text('ເພີ່ມລາຍເຊັນ',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
+                        Text(
+                          'ເພີ່ມລາຍເຊັນ',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -778,9 +818,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 const SizedBox(width: 10),
               ],
               GestureDetector(
-                onTap: pages.isEmpty || _isLoadingFile
-                    ? null
-                    : _onSubmit,
+                onTap: pages.isEmpty || _isLoadingFile ? null : _onSubmit,
                 child: Container(
                   height: 38,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -809,8 +847,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
                         color: pages.isEmpty || _isLoadingFile
                             ? Colors.white.withOpacity(0.5)
                             : _isApproveMode
-                                ? Colors.orange.shade600
-                                : ColorService().successColor,
+                            ? Colors.orange.shade600
+                            : ColorService().successColor,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -819,8 +857,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
                           color: pages.isEmpty || _isLoadingFile
                               ? Colors.white.withOpacity(0.5)
                               : _isApproveMode
-                                  ? Colors.orange.shade600
-                                  : ColorService().successColor,
+                              ? Colors.orange.shade600
+                              : ColorService().successColor,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -853,12 +891,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade200)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
             ),
             child: Row(
               children: [
@@ -869,30 +905,40 @@ class _ApproveScreenState extends State<ApproveScreen> {
                     color: ColorService().primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(UniconsLine.layers,
-                      size: 14, color: ColorService().primaryColor),
+                  child: Icon(
+                    UniconsLine.layers,
+                    size: 14,
+                    color: ColorService().primaryColor,
+                  ),
                 ),
                 const SizedBox(width: 8),
-                Text('ໜ້າທັງໝົດ',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: ColorService().mainTextColor)),
+                Text(
+                  'ໜ້າທັງໝົດ',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: ColorService().mainTextColor,
+                  ),
+                ),
                 const Spacer(),
                 if (pages.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color:
-                          ColorService().primaryColor.withOpacity(0.1),
+                      color: ColorService().primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text('${pages.length}',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: ColorService().primaryColor)),
+                    child: Text(
+                      '${pages.length}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: ColorService().primaryColor,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -906,11 +952,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 final bool isSelected = selectedPageIndex == index;
                 final bool hasSignature =
                     pageSignatures.containsKey(index) &&
-                        pageSignatures[index]!.isNotEmpty;
+                    pageSignatures[index]!.isNotEmpty;
 
                 return GestureDetector(
-                  onTap: () =>
-                      setState(() => selectedPageIndex = index),
+                  onTap: () => setState(() => selectedPageIndex = index),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     margin: const EdgeInsets.only(bottom: 8),
@@ -926,9 +971,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
                       boxShadow: [
                         BoxShadow(
                           color: isSelected
-                              ? ColorService()
-                                  .primaryColor
-                                  .withOpacity(0.12)
+                              ? ColorService().primaryColor.withOpacity(0.12)
                               : Colors.black.withOpacity(0.04),
                           blurRadius: isSelected ? 8 : 4,
                           offset: const Offset(0, 2),
@@ -939,53 +982,57 @@ class _ApproveScreenState extends State<ApproveScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? ColorService()
-                                    .primaryColor
-                                    .withOpacity(0.05)
+                                ? ColorService().primaryColor.withOpacity(0.05)
                                 : Colors.grey.shade50,
                             borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(9)),
+                              top: Radius.circular(9),
+                            ),
                           ),
                           child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('ໜ້າ ${index + 1}',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSelected
-                                          ? ColorService().primaryColor
-                                          : Colors.grey.shade500)),
+                              Text(
+                                'ໜ້າ ${index + 1}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSelected
+                                      ? ColorService().primaryColor
+                                      : Colors.grey.shade500,
+                                ),
+                              ),
                               if (hasSignature)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 1),
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: ColorService()
-                                        .primaryColor
+                                    color: ColorService().primaryColor
                                         .withOpacity(0.1),
-                                    borderRadius:
-                                        BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.edit,
-                                          color:
-                                              ColorService().primaryColor,
-                                          size: 10),
+                                      Icon(
+                                        Icons.edit,
+                                        color: ColorService().primaryColor,
+                                        size: 10,
+                                      ),
                                       const SizedBox(width: 2),
                                       Text(
-                                          '${pageSignatures[index]!.length}',
-                                          style: TextStyle(
-                                              color: ColorService()
-                                                  .primaryColor,
-                                              fontSize: 10,
-                                              fontWeight:
-                                                  FontWeight.bold)),
+                                        '${pageSignatures[index]!.length}',
+                                        style: TextStyle(
+                                          color: ColorService().primaryColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -994,7 +1041,9 @@ class _ApproveScreenState extends State<ApproveScreen> {
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: OptimizedPdfThumbnail(
@@ -1031,19 +1080,26 @@ class _ApproveScreenState extends State<ApproveScreen> {
                       color: Colors.grey.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.touch_app,
-                        size: 32, color: Colors.grey.shade400),
+                    child: Icon(
+                      Icons.touch_app,
+                      size: 32,
+                      color: Colors.grey.shade400,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Text('ກົດເລືອກໜ້າຈາກດ້ານຊ້າຍ',
-                      style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500)),
+                  Text(
+                    'ກົດເລືອກໜ້າຈາກດ້ານຊ້າຍ',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text('ເພື່ອກວດສອບ ຫຼື ເພີ່ມລາຍເຊັນ',
-                      style: TextStyle(
-                          color: Colors.grey.shade400, fontSize: 13)),
+                  Text(
+                    'ເພື່ອກວດສອບ ຫຼື ເພີ່ມລາຍເຊັນ',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  ),
                 ],
               ),
             )
@@ -1057,8 +1113,7 @@ class _ApproveScreenState extends State<ApproveScreen> {
     final sigs = pageSignatures[pageIdx] ?? [];
 
     return FutureBuilder<Size>(
-      future:
-          _getPageSizeCached(pageInfo.filePath, pageInfo.pageNumber),
+      future: _getPageSizeCached(pageInfo.filePath, pageInfo.pageNumber),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -1080,9 +1135,10 @@ class _ApproveScreenState extends State<ApproveScreen> {
               decoration: BoxDecoration(
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 10,
-                      offset: const Offset(0, 4)),
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
                 border: Border.all(color: Colors.blue, width: 3),
               ),
@@ -1111,14 +1167,12 @@ class _ApproveScreenState extends State<ApproveScreen> {
                           rotation: rotation,
                           onUpdate: (updated) {
                             setState(() {
-                              pageSignatures[pageIdx]![sigIndex] =
-                                  updated;
+                              pageSignatures[pageIdx]![sigIndex] = updated;
                             });
                           },
                           onDelete: () {
                             setState(() {
-                              pageSignatures[pageIdx]!
-                                  .removeAt(sigIndex);
+                              pageSignatures[pageIdx]!.removeAt(sigIndex);
                               if (pageSignatures[pageIdx]!.isEmpty) {
                                 pageSignatures.remove(pageIdx);
                               }
@@ -1145,10 +1199,7 @@ class _PdfPageViewer extends StatefulWidget {
   final String filePath;
   final int pageNumber;
 
-  const _PdfPageViewer({
-    required this.filePath,
-    required this.pageNumber,
-  });
+  const _PdfPageViewer({required this.filePath, required this.pageNumber});
 
   @override
   State<_PdfPageViewer> createState() => _PdfPageViewerState();

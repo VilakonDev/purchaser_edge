@@ -58,7 +58,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> activateLicense(String licenseKey) async {
     final response = await http.post(
-      Uri.parse(UrlService().baseUrl + '/auth/activate'),
+      Uri.parse('${UrlService().baseUrl}/auth/activate'),
       body: {"license_key": licenseKey, "device_id": await getDeviceID() ?? ""},
     );
 

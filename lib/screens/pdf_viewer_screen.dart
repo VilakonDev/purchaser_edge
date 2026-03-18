@@ -99,7 +99,7 @@ class _ThumbnailRenderQueue {
       document = null;
 
       final buffer = await ui.ImmutableBuffer.fromUint8List(pixelsCopy);
-      final descriptor = await ui.ImageDescriptor.raw(
+      final descriptor = ui.ImageDescriptor.raw(
         buffer,
         width: pw,
         height: ph,
@@ -174,6 +174,8 @@ class ReviewDocumentData {
 // PdfViewerScreen
 // ─────────────────────────────────────────────────────────────────────────────
 class PdfViewerScreen extends StatefulWidget {
+  const PdfViewerScreen({super.key});
+
   @override
   _PdfViewerScreenState createState() => _PdfViewerScreenState();
 }
@@ -384,8 +386,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       GestureDetector(
                         onTap: () {
                           pickSignatureFromUrl(
-                            UrlService().baseUrl +
-                                '/signature/${context.read<AuthProvider>().currentUser!.fileSignature}',
+                            '${UrlService().baseUrl}/signature/${context.read<AuthProvider>().currentUser!.fileSignature}',
                           );
                         },
                         child: Container(
@@ -726,10 +727,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
       int remap(int key) {
         if (key == oldIndex) return newIndex;
-        if (oldIndex < newIndex && key > oldIndex && key <= newIndex)
+        if (oldIndex < newIndex && key > oldIndex && key <= newIndex) {
           return key - 1;
-        if (oldIndex > newIndex && key >= newIndex && key < oldIndex)
+        }
+        if (oldIndex > newIndex && key >= newIndex && key < oldIndex) {
           return key + 1;
+        }
         return key;
       }
 
@@ -1157,11 +1160,11 @@ class OptimizedPdfThumbnail extends StatefulWidget {
   final int rotation;
 
   const OptimizedPdfThumbnail({
-    Key? key,
+    super.key,
     required this.filePath,
     required this.pageNumber,
     required this.rotation,
-  }) : super(key: key);
+  });
 
   @override
   State<OptimizedPdfThumbnail> createState() =>
@@ -1317,14 +1320,14 @@ class SinglePagePreview extends StatelessWidget {
   final Function(int) onSignatureDelete;
 
   const SinglePagePreview({
-    Key? key,
+    super.key,
     required this.pageInfo,
     required this.pageIndex,
     required this.rotation,
     required this.signatures,
     required this.onSignatureUpdate,
     required this.onSignatureDelete,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1408,11 +1411,11 @@ class OptimizedPdfPreview extends StatefulWidget {
   final int rotation;
 
   const OptimizedPdfPreview({
-    Key? key,
+    super.key,
     required this.filePath,
     required this.pageNumber,
     required this.rotation,
-  }) : super(key: key);
+  });
 
   @override
   State<OptimizedPdfPreview> createState() => _OptimizedPdfPreviewState();
@@ -1498,12 +1501,12 @@ class SignatureOverlay extends StatefulWidget {
   final VoidCallback onDelete;
 
   const SignatureOverlay({
-    Key? key,
+    super.key,
     required this.signature,
     this.rotation = 0,
     required this.onUpdate,
     required this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   State<SignatureOverlay> createState() => _SignatureOverlayState();

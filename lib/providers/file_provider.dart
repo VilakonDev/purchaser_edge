@@ -11,7 +11,7 @@ class FileEntry {
 }
 
 class FileProvider extends ChangeNotifier {
-  List<FileEntry> _files = [];
+  final List<FileEntry> _files = [];
 
   List<FileEntry> get files => _files;
 
@@ -31,7 +31,7 @@ class FileProvider extends ChangeNotifier {
   }
 
   void openFile(String fileName) async {
-    final uri = Uri.parse(UrlService().baseUrl + '/uploads/${fileName}');
+    final uri = Uri.parse('${UrlService().baseUrl}/uploads/${fileName}');
     await launchUrl(uri);
   }
 

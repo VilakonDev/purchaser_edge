@@ -333,7 +333,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                   )
                                 : ListView.separated(
                                     itemCount: files.length,
-                                    separatorBuilder: (_, __) => Divider(
+                                    separatorBuilder: (_, _) => Divider(
                                       height: 1,
                                       color: Colors.grey.withOpacity(0.1),
                                     ),
@@ -499,7 +499,7 @@ class _CreatePurchaseOrderPageState extends State<CreatePurchaseOrderPage> {
                                     documentTitle,
                                     category,
                                     currentUser.branch,
-                                    currentUser.fullName,
+                                    currentUser.id.toString(),
                                   );
                               Navigator.push(
                                 context,

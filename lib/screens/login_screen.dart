@@ -502,7 +502,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ListView.separated(
                         padding: const EdgeInsets.all(8),
                         itemCount: 10,
-                        separatorBuilder: (_, __) =>
+                        separatorBuilder: (_, _) =>
                             const SizedBox(height: 4),
                         itemBuilder: (context, index) {
                           return Container(

@@ -8,7 +8,7 @@ import 'package:purchaser_edge/model/monthly_buy_model.dart';
 import 'package:purchaser_edge/services/url_service.dart';
 
 class DocumentProvider extends ChangeNotifier {
-  List<String> _category = [
+  final List<String> _category = [
     'MA.SA.AU',
     'HT.PT.PB.GD',
     'FT.BD.HO.FD',

@@ -8,11 +8,9 @@ class DocumentModel {
   final String fileDm;
   final String fileDirector;
   final String status;
-  final String approvedByDm;
-  final String approvedByDirector;
-  final String createdBy;
+  final String fullName;
+  final String email;
   final String createdAt;
-  final String updatedAt;
 
   DocumentModel({
     required this.id,
@@ -24,11 +22,9 @@ class DocumentModel {
     required this.fileDm,
     required this.fileDirector,
     required this.status,
-    required this.approvedByDm,
-    required this.approvedByDirector,
-    required this.createdBy,
+    required this.fullName,
+    required this.email,
     required this.createdAt,
-    required this.updatedAt,
   });
 
   factory DocumentModel.fromJson(Map<String, dynamic> json) {
@@ -42,11 +38,10 @@ class DocumentModel {
       fileDm: json["file_dm"] ?? "",
       fileDirector: json["file_director"] ?? "",
       status: json["status"],
-      approvedByDm: json["approved_by_dm"] ?? "",
-      approvedByDirector: json["approved_by_director"] ?? "",
-      createdBy: json["created_by"] ?? "",
+      fullName: json["full_name"] ?? "",
+      email: json["email"] ?? "",
       createdAt: json["created_at"] ?? "",
-      updatedAt: json["updated_at"] ?? "",
+     
     );
   }
 }

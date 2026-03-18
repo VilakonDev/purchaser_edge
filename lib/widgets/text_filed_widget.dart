@@ -18,7 +18,7 @@ class _TextFiledWidgetState extends State<TextFiledWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
+        SizedBox(
           width: 100,
           height: 40,
           child: Center(

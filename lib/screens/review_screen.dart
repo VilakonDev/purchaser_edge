@@ -7,8 +7,11 @@ import 'package:http/io_client.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:provider/provider.dart';
+import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
+import 'package:purchaser_edge/providers/user_provider.dart';
+import 'package:purchaser_edge/services/send_email_service.dart';
 import 'package:purchaser_edge/services/url_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
@@ -164,7 +167,7 @@ class ReviewScreen extends StatelessWidget {
   // ─────────────────────────────────────────────────────────────────────────
   http.Client _createNgrokClient() {
     final ioClient = HttpClient();
-    ioClient.badCertificateCallback = (_, __, ___) => true;
+    ioClient.badCertificateCallback = (_, _, _) => true;
     ioClient.connectionTimeout = const Duration(seconds: 30);
     return IOClient(ioClient);
   }
@@ -245,7 +248,15 @@ class ReviewScreen extends StatelessWidget {
 
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 
+      final currentUser = context.read<AuthProvider>().currentUser!;
+
       if (response.statusCode == 200) {
+        SendEmailService().sendEmail(
+          '${context.read<UserProvider>().dmEmail}',
+          'Purchase Officer',
+          'หมายเลก ${context.read<DocumentProvider>().documentNumber} จาก ${currentUser.fullName}',
+        );
+
         if (context.mounted) {
           context.read<FileProvider>().clearFile();
           context.read<DocumentProvider>().resetDocumentInfo();

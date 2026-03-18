@@ -8,6 +8,7 @@ import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/document_provider.dart';
 import 'package:purchaser_edge/providers/file_provider.dart';
 import 'package:purchaser_edge/services/color_service.dart';
+import 'package:purchaser_edge/services/send_email_service.dart';
 import 'package:purchaser_edge/widgets/app_bar_widget.dart';
 import 'package:purchaser_edge/widgets/drop_down_widget.dart';
 import 'package:unicons/unicons.dart';
@@ -240,7 +241,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                                 ),
                                                 _metaChip(
                                                   icon: UniconsLine.user,
-                                                  label: doc.createdBy,
+                                                  label: doc.fullName,
                                                 ),
                                                 _metaChip(
                                                   icon:
@@ -473,28 +474,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
           const SizedBox(width: 12),
           GestureDetector(
             onTap: () async {
-              String username = "vilakonsili@gmail.com";
-              String password = "nmll snjf rfqz iitb";
-
-              final smtpServer = SmtpServer(
-                'smtp.gmail.com',
-                port: 587,
-                username: username,
-                password: password,
-              );
-
-              final message = Message()
-                ..from = Address(username, 'Purchase System')
-                ..recipients.add('aloun.d@tcrhomestorelaos.com')
-                ..subject = 'มีเอกสารรออนุมัติ'
-                ..text = 'Document PR-0021 รอ Manager Approve';
-
-              try {
-                final sendReport = await send(message, smtpServer);
-                print('Email sent: ' + sendReport.toString());
-              } catch (e) {
-                print('Email send error: $e');
-              }
+             SendEmailService().sendEmail('vilakonsili@gmail.com','TEST NOTIFICATION','New PO for pending approve');
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

@@ -27,6 +27,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   final fullNameController = TextEditingController();
   final usernameController = TextEditingController();
+  final emailController = TextEditingController();
   final passwordControlelr = TextEditingController();
 
   void pickSignatureFile() async {
@@ -241,8 +242,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               const SizedBox(height: 8),
                               GestureDetector(
                                 onTap: () {
-                                  context.read<UserProvider>().deleteUser(
-                                    userData.id,
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) =>
+                                        _buildDeleteUser(userData.id),
                                   );
                                 },
                                 child: Container(
@@ -476,7 +479,17 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                         ],
                       ),
-
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFiledWidget(
+                              label: 'ອີເມວ ',
+                              isHidden: false,
+                              controller: emailController,
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 20),
                       Divider(color: Colors.grey.shade100, height: 1),
                       const SizedBox(height: 20),
@@ -617,10 +630,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                                       fullNameController.text.trim(),
                                       usernameController.text.trim(),
                                       passwordControlelr.text.trim(),
+                                      emailController.text.trim(),
                                       branchSelected.toString(),
                                       categorySelected.toString(),
                                       roleSelected.toString(),
                                     );
+
+                                    fullNameController.text = "";
+                                    usernameController.text = "";
+                                    passwordControlelr.text = "";
+                                    emailController.text = "";
+
+                                    context.read<UserProvider>().setSignature(null);
 
                                     if (mounted) Navigator.pop(context);
                                   }
@@ -676,6 +697,134 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       ),
                     ],
                   ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDeleteUser(int userId) {
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 40,
+            vertical: 24,
+          ),
+          child: Container(
+            width: 550,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Column(
+                  spacing: 20,
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(top: 50),
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            'https://cdn3d.iconscout.com/3d/premium/thumb/error-3d-icon-png-download-12692245.png',
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    Text(
+                      "ຕ້ອງການລົບຜູ້ໃຊ້ ອີ່ຫລີຕິ່!",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      width: double.infinity,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(10),
+                          bottomRight: Radius.circular(10),
+                        ),
+                      ),
+                      child: Row(
+                        spacing: 10,
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  spacing: 10,
+                                  children: [
+                                    Icon(UniconsLine.times),
+                                    Text('ຍົກເລີກ'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                context.read<UserProvider>().deleteUser(userId);
+
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  color: ColorService().errorColor,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: Colors.red.shade400,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  spacing: 10,
+                                  children: [
+                                    Icon(
+                                      UniconsLine.trash,
+                                      color: Colors.white,
+                                    ),
+                                    Text(
+                                      'ຢືນຢັນ',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

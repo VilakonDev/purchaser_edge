@@ -205,7 +205,7 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                   ),
                                                   _metaChip(
                                                     icon: UniconsLine.user,
-                                                    label: doc.createdBy,
+                                                    label: doc.fullName,
                                                   ),
                                                   _metaChip(
                                                     icon: UniconsLine
@@ -290,6 +290,9 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                             : doc.fileDm,
                                                         documentId:
                                                             doc.id.toString(),
+                                                        documentNumber: doc.documentNumber,
+                                                        documentTitle: doc.documentTitle,
+                                                        creatorEmail: doc.email,
                                                       ),
                                                     ),
                                                   );

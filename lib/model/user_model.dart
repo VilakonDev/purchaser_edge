@@ -2,6 +2,7 @@ class UserModel {
   final int id;
   final String fullName;
   final String username;
+  final String email;
   final String password;
   final String role;
   final String branch;
@@ -12,6 +13,7 @@ class UserModel {
     required this.id,
     required this.fullName,
     required this.username,
+    required this.email,
     required this.password,
     required this.role,
     required this.branch,
@@ -24,10 +26,11 @@ class UserModel {
       id: json['id'],
       fullName: json['full_name'],
       username: json['username'],
+      email: json['email'],
       password: json['password'],
       role: json['role'],
-      branch: json['branch'],
-      category: json['category'],
+      branch: json['branch'] ?? '',
+      category: json['category'] ?? '',
       status: json['status'],
     );
   }
@@ -37,6 +40,7 @@ class CurrentUserModel {
   final int id;
   final String fullName;
   final String username;
+  final String email;
   final String password;
   final String role;
   final String branch;
@@ -48,6 +52,7 @@ class CurrentUserModel {
     required this.id,
     required this.fullName,
     required this.username,
+    required this.email,
     required this.password,
     required this.role,
     required this.branch,
@@ -61,11 +66,12 @@ class CurrentUserModel {
       id: json['id'],
       fullName: json['full_name'],
       username: json['username'],
+      email: json['email'],
       password: json['password'],
       role: json['role'],
-      branch: json['branch'],
-      category: json['category'],
-      fileSignature: json['file_signature'],
+      branch: json['branch'] ?? '',
+      category: json['category'] ?? '',
+      fileSignature: json['file_signature'] ?? '',
       status: json['status'],
     );
   }

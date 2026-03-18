@@ -32,7 +32,7 @@ class _DropDownWidgetState extends State<DropDownWidget> {
           width: double.infinity,
           height: 40,
           child: DropdownButtonFormField<String>(
-            value: selectedValue,
+            initialValue: selectedValue,
             onChanged: (val) {
               setState(() => selectedValue = val);
               widget.onChanged?.call(val);
