@@ -52,34 +52,36 @@ class _DashBoardPageState extends State<DashBoardPage> {
 
   // ── Summary cards ──────────────────────────────────────────────
   Widget _buildSummaryCards() {
-    final docs = context.watch<DocumentProvider>();
+    final documentProvider = context.watch<DocumentProvider>();
 
     final cards = [
       _SummaryData(
         label: 'ເອກະສານທັງໝົດ',
         sublabel: 'ທຸກສະຖານະ',
-        count: docs.documents.length,
+        count: documentProvider.documents.length,
         icon: UniconsLine.file_alt,
         color: const Color(0xFF2563EB),
       ),
       _SummaryData(
         label: 'ລໍຖ້າອະນຸມັດ',
         sublabel: 'ຍັງບໍ່ດຳເນີນການ',
-        count: docs.pendingDocument.length + docs.dmApprovedDocument.length,
+        count:
+            documentProvider.pendingDocument.length +
+            documentProvider.dmApprovedDocument.length,
         icon: UniconsLine.clock,
         color: const Color(0xFFF59E0B),
       ),
       _SummaryData(
         label: 'ອະນຸມັດແລ້ວ',
         sublabel: 'ດຳເນີນການສຳເລັດ',
-        count: docs.directorApproved.length,
+        count: documentProvider.directorApproved.length,
         icon: UniconsLine.check_circle,
         color: const Color(0xFF10B981),
       ),
       _SummaryData(
         label: 'ຕີກັບ',
         sublabel: 'ຕ້ອງດຳເນີນການໃໝ່',
-        count: 120,
+        count: documentProvider.rejectedDocument.length,
         icon: UniconsLine.times_circle,
         color: const Color(0xFFEF4444),
       ),
@@ -183,21 +185,29 @@ class _DashBoardPageState extends State<DashBoardPage> {
 
   // ── Pie chart ──────────────────────────────────────────────────
   Widget _buildPieChart() {
-    final docs = context.watch<DocumentProvider>();
+    final documentProvider = context.watch<DocumentProvider>();
 
     final legends = [
-      _LegendData('ທັງໝົດ', const Color(0xFF2563EB), docs.documents.length),
+      _LegendData(
+        'ທັງໝົດ',
+        const Color(0xFF2563EB),
+        documentProvider.documents.length,
+      ),
       _LegendData(
         'ລໍຖ້າ',
         const Color(0xFFF59E0B),
-        docs.pendingDocument.length,
+        documentProvider.pendingDocument.length,
       ),
       _LegendData(
         'ອະນຸມັດ',
         const Color(0xFF10B981),
-        docs.directorApproved.length,
+        documentProvider.directorApproved.length,
       ),
-      _LegendData('ຕີກັບ', const Color(0xFFEF4444), 2),
+      _LegendData(
+        'ຕີກັບ',
+        const Color(0xFFEF4444),
+        documentProvider.rejectedDocument.length,
+      ),
     ];
 
     return Container(
@@ -259,10 +269,10 @@ class _DashBoardPageState extends State<DashBoardPage> {
                   Color(0xFFEF4444),
                 ],
                 values: [
-                  docs.documents.length.toDouble(),
-                  docs.pendingDocument.length.toDouble(),
-                  docs.directorApproved.length.toDouble(),
-                  2,
+                  documentProvider.documents.length.toDouble(),
+                  documentProvider.pendingDocument.length.toDouble(),
+                  documentProvider.directorApproved.length.toDouble(),
+                  documentProvider.rejectedDocument.length.toDouble(),
                 ],
                 gapSize: 0.25,
                 centerText: '',

@@ -9,6 +9,7 @@ class DocumentModel {
   final String fileDirector;
   final String status;
   final String fullName;
+  final String comment;
   final String email;
   final String createdAt;
 
@@ -22,6 +23,7 @@ class DocumentModel {
     required this.fileDm,
     required this.fileDirector,
     required this.status,
+    required this.comment,
     required this.fullName,
     required this.email,
     required this.createdAt,
@@ -38,6 +40,7 @@ class DocumentModel {
       fileDm: json["file_dm"] ?? "",
       fileDirector: json["file_director"] ?? "",
       status: json["status"],
+      comment: json["comment"] ?? "",
       fullName: json["full_name"] ?? "",
       email: json["email"] ?? "",
       createdAt: json["created_at"] ?? "",

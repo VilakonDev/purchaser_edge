@@ -9,9 +9,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
 import 'package:purchaser_edge/providers/user_provider.dart';
+import 'package:purchaser_edge/screens/home_screen.dart';
 import 'package:purchaser_edge/services/send_email_service.dart';
 
 import 'package:purchaser_edge/services/url_service.dart';
+import 'package:purchaser_edge/widgets/alert_dialog_widget.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:purchaser_edge/screens/pdf_viewer_screen.dart';
@@ -56,6 +58,8 @@ class _ApproveScreenState extends State<ApproveScreen> {
   String? _downloadedFilePath;
 
   bool get _isApproveMode => widget.fileName != null;
+
+  final commentController = TextEditingController();
 
   @override
   void initState() {
@@ -378,7 +382,13 @@ class _ApproveScreenState extends State<ApproveScreen> {
       }
 
       if (response.statusCode == 200) {
-        _showSuccessDialog('Approve ເອກະສານສຳເລັດ!', popCount: 1);
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialogWidget(
+            type: 'success',
+            textContent: 'ອະນຸມັດເອກະສານສຳເລັດແລ້ວ!',
+          ),
+        );
 
         SendEmailService().sendEmail(
           widget.creatorEmail.toString(),
@@ -392,8 +402,13 @@ class _ApproveScreenState extends State<ApproveScreen> {
           'มีเอกสาร ${widget.documentNumber} เรื่อง : ${widget.documentTitle} รออนุมัติ',
         );
       } else {
-        _showErrorDialog(
-          'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}',
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialogWidget(
+            type: 'error',
+            textContent:
+                'ເກີດຂໍ້ຜິດພາດ: ${response.statusCode}\n${response.body}',
+          ),
         );
       }
     } catch (e) {
@@ -401,7 +416,13 @@ class _ApproveScreenState extends State<ApproveScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
       if (context.mounted) {
-        _showErrorDialog('ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialogWidget(
+            type: 'error',
+            textContent: 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e',
+          ),
+        );
       }
     }
   }
@@ -437,7 +458,13 @@ class _ApproveScreenState extends State<ApproveScreen> {
       }
 
       if (response.statusCode == 200) {
-        _showSuccessDialog('Approve ເອກະສານສຳເລັດ!', popCount: 1);
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialogWidget(
+            type: 'success',
+            textContent: 'ອະນຸມັດເອກະສານສຳເລັດແລ້ວ!',
+          ),
+        );
 
         SendEmailService().sendEmail(
           widget.creatorEmail.toString(),
@@ -452,9 +479,184 @@ class _ApproveScreenState extends State<ApproveScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
       if (context.mounted) {
-        _showErrorDialog('ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e');
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialogWidget(
+            type: 'error',
+            textContent: 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e',
+          ),
+        );
       }
     }
+  }
+
+  Future<void> _rejectDocument() async {
+    try {
+      final response = await http.post(
+        Uri.parse("${UrlService().baseUrl}/documents/reject"),
+        body: {
+          "id": widget.documentId,
+          "comment": commentController.text,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        print("Rejected");
+      }
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialogWidget(
+          type: 'error',
+          textContent: 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Server ໄດ້\n$e',
+        ),
+      );
+    }
+  }
+
+  Future<void> rejectDocumentForm() {
+    return showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: Container(
+          width: 550,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                spacing: 20,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      spacing: 20,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ຄຳເຫັນ',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextField(
+                            controller: commentController,
+                            minLines: 1,
+                            maxLines: null,
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.grey.shade200,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(
+                                  color: Colors.grey.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    width: double.infinity,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(10),
+                        bottomRight: Radius.circular(10),
+                      ),
+                    ),
+                    child: Row(
+                      spacing: 10,
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              height: 45,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: Colors.grey.shade400),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                spacing: 10,
+                                children: [
+                                  Icon(UniconsLine.times),
+                                  Text('ຍົກເລີກ'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              _rejectDocument();
+
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (_) => HomeScreen()),
+                                (predicate) => false,
+                              );
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              height: 45,
+                              decoration: BoxDecoration(
+                                color: ColorService().errorColor,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: Colors.red.shade400),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                spacing: 10,
+                                children: [
+                                  Icon(UniconsLine.check, color: Colors.white),
+                                  Text(
+                                    'ຢືນຢັນ',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showLoadingDialog(String message) {
@@ -484,129 +686,6 @@ class _ApproveScreenState extends State<ApproveScreen> {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showSuccessDialog(String message, {required int popCount}) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.green,
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context, rootNavigator: true).pop();
-                    for (int i = 0; i < popCount; i++) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  child: const Text(
-                    'ກັບສູ່ໜ້າຫຼັກ',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.error_outline,
-                  color: Colors.red,
-                  size: 36,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'ເກີດຂໍ້ຜິດພາດ',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(),
-                  child: const Text(
-                    'ປິດ',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -784,6 +863,30 @@ class _ApproveScreenState extends State<ApproveScreen> {
 
           Row(
             children: [
+              GestureDetector(
+                onTap: () {
+                  rejectDocumentForm();
+                },
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: ColorService().errorColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    spacing: 8,
+                    children: [
+                      Icon(UniconsLine.times, color: Colors.white),
+                      Text(
+                        'ຕີກັບເອກະສານ',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: 10),
               if (selectedPageIndex != null) ...[
                 GestureDetector(
                   onTap: () {

@@ -95,6 +95,9 @@ class DocumentProvider extends ChangeNotifier {
   List<DocumentModel> get directorApproved =>
       _documents.where((doc) => doc.status == "DIRECTOR_APPROVED").toList();
 
+  List<DocumentModel> get rejectedDocument =>
+      _documents.where((doc) => doc.status == "REJECTED").toList();
+
   List<DocumentModel> showAllDocuments(String category) {
     if (category == "ທັງຫມົດ") {
       return _documents;

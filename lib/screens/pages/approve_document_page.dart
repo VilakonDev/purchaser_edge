@@ -34,8 +34,8 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
     final documents = role == "DISTRICT_MANAGER"
         ? docProvider.pendingDocument
         : role == "DIRECTOR"
-            ? docProvider.dmApprovedDocument
-            : [];
+        ? docProvider.dmApprovedDocument
+        : [];
 
     return Container(
       decoration: BoxDecoration(color: ColorService().mainBackGroundColor),
@@ -48,38 +48,6 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
-
-                  // ── Summary chips ──────────────────────────────────
-                  Row(
-                    children: [
-                      _summaryChip(
-                        icon: UniconsLine.file_alt,
-                        label: 'ທັງໝົດ',
-                        count: documents.length,
-                        color: ColorService().primaryColor,
-                      ),
-                      const SizedBox(width: 10),
-                      _summaryChip(
-                        icon: UniconsLine.clock,
-                        label: 'ລໍຖ້າ',
-                        count: documents
-                            .where((d) => d.status == "PENDING")
-                            .length,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(width: 10),
-                      _summaryChip(
-                        icon: UniconsLine.check_circle,
-                        label: 'ອະນຸມັດ',
-                        count: documents
-                            .where((d) => d.status != "PENDING")
-                            .length,
-                        color: ColorService().successColor,
-                      ),
-                    ],
-                  ),
-
                   const SizedBox(height: 16),
 
                   // ── List ───────────────────────────────────────────
@@ -127,11 +95,11 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                           width: 48,
                                           height: 48,
                                           decoration: BoxDecoration(
-                                            color: ColorService()
-                                                .primaryColor
+                                            color: ColorService().primaryColor
                                                 .withOpacity(0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                           child: Icon(
                                             UniconsLine.file_alt,
@@ -165,24 +133,26 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 3,
-                                                    ),
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 3,
+                                                        ),
                                                     decoration: BoxDecoration(
                                                       color:
                                                           Colors.grey.shade100,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              20),
+                                                            20,
+                                                          ),
                                                     ),
                                                     child: Text(
                                                       doc.documentNumber,
                                                       style: TextStyle(
                                                         fontSize: 11,
                                                         color: Colors
-                                                            .grey.shade600,
+                                                            .grey
+                                                            .shade600,
                                                         fontWeight:
                                                             FontWeight.w500,
                                                       ),
@@ -200,8 +170,7 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                 children: [
                                                   _metaChip(
                                                     icon: UniconsLine.folder,
-                                                    label:
-                                                        doc.documentCategory,
+                                                    label: doc.documentCategory,
                                                   ),
                                                   _metaChip(
                                                     icon: UniconsLine.user,
@@ -211,8 +180,11 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                     icon: UniconsLine
                                                         .calendar_alt,
                                                     label: DateFormat('d MMM y')
-                                                        .format(DateTime.parse(
-                                                            doc.createdAt)),
+                                                        .format(
+                                                          DateTime.parse(
+                                                            doc.createdAt,
+                                                          ),
+                                                        ),
                                                   ),
                                                 ],
                                               ),
@@ -249,8 +221,8 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                 final url = isPending
                                                     ? "http://localhost:5000/uploads/${doc.filePending}"
                                                     : isDmApproved
-                                                        ? "http://localhost:5000/uploads/${doc.fileDm}"
-                                                        : "http://localhost:5000/uploads/${doc.fileDirector}";
+                                                    ? "http://localhost:5000/uploads/${doc.fileDm}"
+                                                    : "http://localhost:5000/uploads/${doc.fileDirector}";
                                                 context
                                                     .read<FileProvider>()
                                                     .openFile(url);
@@ -282,16 +254,18 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                   Navigator.push(
                                                     context,
                                                     MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          ApproveScreen(
-                                                        fileName: role ==
+                                                      builder: (_) => ApproveScreen(
+                                                        fileName:
+                                                            role ==
                                                                 "DISTRICT_MANAGER"
                                                             ? doc.filePending
                                                             : doc.fileDm,
-                                                        documentId:
-                                                            doc.id.toString(),
-                                                        documentNumber: doc.documentNumber,
-                                                        documentTitle: doc.documentTitle,
+                                                        documentId: doc.id
+                                                            .toString(),
+                                                        documentNumber:
+                                                            doc.documentNumber,
+                                                        documentTitle:
+                                                            doc.documentTitle,
                                                         creatorEmail: doc.email,
                                                       ),
                                                     ),
@@ -306,7 +280,8 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
                                                         .withOpacity(0.1),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            10),
+                                                          10,
+                                                        ),
                                                   ),
                                                   child: Icon(
                                                     UniconsLine.check_circle,
@@ -337,52 +312,7 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
     );
   }
 
-  Widget _summaryChip({
-    required IconData icon,
-    required String label,
-    required int count,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  
 
   Widget _metaChip({required IconData icon, required String label}) {
     return Container(
@@ -406,11 +336,9 @@ class _ApproveDocumentPageState extends State<ApproveDocumentPage> {
   }
 
   Widget _statusBadge({required String label, required bool approved}) {
-    final color =
-        approved ? ColorService().successColor : Colors.orange;
+    final color = approved ? ColorService().successColor : Colors.orange;
     final statusText = approved ? 'ອະນຸມັດແລ້ວ' : 'ລໍຖ້າ';
-    final statusIcon =
-        approved ? UniconsLine.check_circle : UniconsLine.clock;
+    final statusIcon = approved ? UniconsLine.check_circle : UniconsLine.clock;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

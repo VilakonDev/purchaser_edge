@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
 import 'package:provider/provider.dart';
 import 'package:purchaser_edge/model/document_model.dart';
 import 'package:purchaser_edge/providers/auth_provider.dart';
@@ -41,6 +39,8 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
             .toList();
       case 2:
         return docs.where((d) => d.status == "DIRECTOR_APPROVED").toList();
+      case 3:
+        return docs.where((d) => d.status == "REJECTED").toList();
       default:
         return docs;
     }
@@ -115,6 +115,16 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                         color: ColorService().successColor,
                         index: 2,
                       ),
+                      const SizedBox(width: 10),
+                      _summaryChip(
+                        icon: UniconsLine.times_circle,
+                        label: 'ເອກະສານຕີກັບ',
+                        count: allDocs
+                            .where((d) => d.status == "REJECTED")
+                            .length,
+                        color: ColorService().successColor,
+                        index: 3,
+                      ),
                     ],
                   ),
 
@@ -138,6 +148,8 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
                                   doc.status == "DIRECTOR_APPROVED";
                               final isDirectorApproved =
                                   doc.status == "DIRECTOR_APPROVED";
+
+                              final isRejected = doc.status == "REJECTED";
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 10),
@@ -258,19 +270,64 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
 
                                             const SizedBox(height: 10),
 
-                                            Row(
-                                              children: [
-                                                _statusBadge(
-                                                  label: 'ຜູ້ຈັດການ',
-                                                  approved: isDmApproved,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                _statusBadge(
-                                                  label: 'ຜູ້ບໍລິຫານ',
-                                                  approved: isDirectorApproved,
-                                                ),
-                                              ],
-                                            ),
+                                            isRejected
+                                                ? Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: ColorService()
+                                                          .errorColor,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: ColorService()
+                                                            .errorColor,
+                                                      ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          UniconsLine
+                                                              .times_circle,
+                                                          size: 11,
+                                                          color: Colors.white,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        Text(
+                                                          'ໝາຍເຫດ : ${doc.comment}',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  )
+                                                : Row(
+                                                    children: [
+                                                      _statusBadge(
+                                                        label: 'ຜູ້ຈັດການ',
+                                                        approved: isDmApproved,
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      _statusBadge(
+                                                        label: 'ຜູ້ບໍລິຫານ',
+                                                        approved:
+                                                            isDirectorApproved,
+                                                      ),
+                                                    ],
+                                                  ),
                                           ],
                                         ),
                                       ),
@@ -365,7 +422,7 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
               ),
             ),
             const SizedBox(width: 6),
-            Text("$count",style: TextStyle(color: color),),
+            Text("$count", style: TextStyle(color: color)),
           ],
         ),
       ),
@@ -474,7 +531,11 @@ class _AllDocumentPageState extends State<AllDocumentPage> {
           const SizedBox(width: 12),
           GestureDetector(
             onTap: () async {
-             SendEmailService().sendEmail('vilakonsili@gmail.com','TEST NOTIFICATION','New PO for pending approve');
+              SendEmailService().sendEmail(
+                'vilakonsili@gmail.com',
+                'TEST NOTIFICATION',
+                'New PO for pending approve',
+              );
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
